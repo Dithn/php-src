@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Andi Gutmans <andi@php.net>                                 |
    |          Zeev Suraski <zeev@php.net>                                 |
@@ -20,6 +19,8 @@
 #ifndef ZEND_HIGHLIGHT_H
 #define ZEND_HIGHLIGHT_H
 
+#include "zend_types.h"
+
 #define HL_COMMENT_COLOR     "#FF8000"    /* orange */
 #define HL_DEFAULT_COLOR     "#0000BB"    /* blue */
 #define HL_HTML_COLOR        "#000000"    /* black */
@@ -28,11 +29,11 @@
 
 
 typedef struct _zend_syntax_highlighter_ini {
-	char *highlight_html;
-	char *highlight_comment;
-	char *highlight_default;
-	char *highlight_string;
-	char *highlight_keyword;
+	const char *highlight_html;
+	const char *highlight_comment;
+	const char *highlight_default;
+	const char *highlight_string;
+	const char *highlight_keyword;
 } zend_syntax_highlighter_ini;
 
 

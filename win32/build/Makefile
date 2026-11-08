@@ -1,13 +1,11 @@
 #  +----------------------------------------------------------------------+
-#  | Copyright (c) The PHP Group                                          |
+#  | Copyright © The PHP Group and Contributors.                          |
 #  +----------------------------------------------------------------------+
-#  | This source file is subject to version 3.01 of the PHP license,      |
-#  | that is bundled with this package in the file LICENSE, and is        |
-#  | available through the world-wide-web at the following url:           |
-#  | https://www.php.net/license/3_01.txt                                 |
-#  | If you did not receive a copy of the PHP license and are unable to   |
-#  | obtain it through the world-wide-web, please send a note to          |
-#  | license@php.net so we can mail you a copy immediately.               |
+#  | This source file is subject to the Modified BSD License that is      |
+#  | bundled with this package in the file LICENSE, and is available      |
+#  | through the World Wide Web at <https://www.php.net/license/>.        |
+#  |                                                                      |
+#  | SPDX-License-Identifier: BSD-3-Clause                                |
 #  +----------------------------------------------------------------------+
 #  | Author: Wez Furlong <wez@thebrainroom.com>                           |
 #  +----------------------------------------------------------------------+
@@ -25,7 +23,7 @@ PHP_BUILD=$(PHP_BUILD)
 !if "$(PHP_SIMD_SCALE)" == ""
 SIMD_SUFFIX=
 !else
-!if "$(PHP_SIMD_SCALE)" == "SSE2"
+!if "$(PHP_SIMD_SCALE)" == "SSE2" || "$(PHP_SIMD_SCALE)" == "NEON"
 SIMD_SUFFIX=
 !else
 SIMD_SUFFIX=-$(PHP_SIMD_SCALE)
@@ -54,19 +52,22 @@ DEBUGGER_CMD=
 DEBUGGER_ARGS=
 !endif
 
-all: generated_files $(EXT_TARGETS) $(PECL_TARGETS) $(SAPI_TARGETS)
+all: generated_files $(EXT_TARGETS) $(PECL_TARGETS) $(SAPI_TARGETS) test_helpers
 
 build_dirs: $(BUILD_DIR) $(BUILD_DIRS_SUB) $(BUILD_DIR_DEV)
 
 !if $(RE2C) == ""
-generated_files: build_dirs Zend\zend_ini_parser.c \
+generated_files: build_dirs \
+	Zend\zend_ini_parser.c Zend\zend_ini_parser.h \
 	Zend\zend_language_parser.c \
 	sapi\phpdbg\phpdbg_parser.c \
 	$(PHPDEF) $(MCFILE)
 !else
-generated_files: build_dirs Zend\zend_ini_parser.c \
-	Zend\zend_language_parser.c Zend\zend_ini_scanner.c \
-	Zend\zend_language_scanner.c \
+generated_files: build_dirs \
+	Zend\zend_ini_parser.c Zend\zend_ini_parser.h \
+	Zend\zend_language_parser.c \
+	Zend\zend_ini_scanner.c Zend\zend_ini_scanner_defs.h \
+	Zend\zend_language_scanner.c Zend\zend_language_scanner_defs.h \
 	sapi\phpdbg\phpdbg_parser.c sapi\phpdbg\phpdbg_lexer.c \
 	$(PHPDEF) $(MCFILE)
 !endif
@@ -75,26 +76,25 @@ $(BUILD_DIR)\$(PHPDLL).def: $(PHP_DLL_DEF_SOURCES)
 	type $(PHP_DLL_DEF_SOURCES) > $(BUILD_DIR)\$(PHPDLL).def
 
 Zend\zend_ini_parser.c Zend\zend_ini_parser.h: Zend\zend_ini_parser.y
-	$(BISON) --output=Zend/zend_ini_parser.c -v -d Zend/zend_ini_parser.y
+	$(BISON) $(BISON_FLAGS) --output=Zend/zend_ini_parser.c -v -d Zend/zend_ini_parser.y
 
 Zend\zend_language_parser.c Zend\zend_language_parser.h: Zend\zend_language_parser.y
-	$(BISON) --output=Zend/zend_language_parser.c -v -d Zend/zend_language_parser.y
+	$(BISON) $(BISON_FLAGS) --output=Zend/zend_language_parser.c -v -d Zend/zend_language_parser.y
 	@if "$(SED)" neq "" $(SED) -i "s,^int zendparse\(.*\),ZEND_API int zendparse\1,g" Zend/zend_language_parser.c
 	@if "$(SED)" neq "" $(SED) -i "s,^int zendparse\(.*\),ZEND_API int zendparse\1,g" Zend/zend_language_parser.h
-	@if "$(SED)" neq "" $(SED) -i "s,^#ifndef YYTOKENTYPE,#include \"zend.h\"\n#ifndef YYTOKENTYPE,g" Zend/zend_language_parser.h
 
 sapi\phpdbg\phpdbg_parser.c sapi\phpdbg\phpdbg_parser.h: sapi\phpdbg\phpdbg_parser.y
-	$(BISON) --output=sapi/phpdbg/phpdbg_parser.c -v -d sapi/phpdbg/phpdbg_parser.y
+	$(BISON) $(BISON_FLAGS) --output=sapi/phpdbg/phpdbg_parser.c -v -d sapi/phpdbg/phpdbg_parser.y
 
 !if $(RE2C) != ""
-Zend\zend_ini_scanner.c: Zend\zend_ini_scanner.l
-	$(RE2C) $(RE2C_FLAGS) --no-generation-date --case-inverted -cbdFt Zend/zend_ini_scanner_defs.h -oZend/zend_ini_scanner.c Zend/zend_ini_scanner.l
+Zend\zend_ini_scanner.c Zend\zend_ini_scanner_defs.h: Zend\zend_ini_scanner.l
+	$(RE2C) $(RE2C_FLAGS) --case-inverted -cbdFt Zend/zend_ini_scanner_defs.h -oZend/zend_ini_scanner.c Zend/zend_ini_scanner.l
 
-Zend\zend_language_scanner.c: Zend\zend_language_scanner.l
-	$(RE2C) $(RE2C_FLAGS) --no-generation-date --case-inverted -cbdFt Zend/zend_language_scanner_defs.h -oZend/zend_language_scanner.c Zend/zend_language_scanner.l
+Zend\zend_language_scanner.c Zend\zend_language_scanner_defs.h: Zend\zend_language_scanner.l
+	$(RE2C) $(RE2C_FLAGS) --case-inverted -cbdFt Zend/zend_language_scanner_defs.h -oZend/zend_language_scanner.c Zend/zend_language_scanner.l
 
 sapi\phpdbg\phpdbg_lexer.c: sapi\phpdbg\phpdbg_lexer.l
-	$(RE2C) $(RE2C_FLAGS) --no-generation-date -cbdFo sapi/phpdbg/phpdbg_lexer.c sapi/phpdbg/phpdbg_lexer.l
+	$(RE2C) $(RE2C_FLAGS) -cbdFo sapi/phpdbg/phpdbg_lexer.c sapi/phpdbg/phpdbg_lexer.l
 !endif
 
 !if "$(ZTS)" == "1"
@@ -130,10 +130,10 @@ $(PHPDLL_RES): win32\build\template.rc
 		/I$(BUILD_DIR) /d MC_INCLUDE="\"$(MCFILE)\"" \
 		win32\build\template.rc
 
-$(BUILD_DIR)\$(PHPDLL): generated_files $(PHPDEF) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(PHPDLL_RES) $(MCFILE)
+$(BUILD_DIR)\$(PHPDLL): generated_files $(PHPDEF) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(PHPDLL_RES) $(ASM_OBJS) $(MCFILE)
 	@copy win32\build\default.manifest $(BUILD_DIR)\$(PHPDLL).manifest >nul
 #	@$(CC) $(PHP_GLOBAL_OBJS) $(STATIC_EXT_OBJS) $(STATIC_EXT_LIBS) $(LIBS) $(PHPDLL_RES) /link /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
-	@"$(LINK)" $(PHP_GLOBAL_OBJS_RESP) $(STATIC_EXT_OBJS_RESP) $(STATIC_EXT_LIBS) $(LIBS) $(PHPDLL_RES) /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
+	@"$(LINK)" $(PHP_GLOBAL_OBJS_RESP) $(STATIC_EXT_OBJS_RESP) $(STATIC_EXT_LIBS) $(LIBS) $(ASM_OBJS) $(PHPDLL_RES) /out:$(BUILD_DIR)\$(PHPDLL) $(PHP8_PGD_OPTION) $(PHP_LDFLAGS) $(LDFLAGS) $(STATIC_EXT_LDFLAGS)
 	-@$(_VC_MANIFEST_EMBED_DLL)
 
 $(BUILD_DIR)\$(PHPLIB): $(BUILD_DIR)\$(PHPDLL)
@@ -182,6 +182,7 @@ clean-pgo: clean-all
 	-del /f /q $(BUILD_DIR)\$(DIST_ZIP_PECL)
 	-del /f /q $(BUILD_DIR)\$(DIST_ZIP_TEST_PACK)
 
+test_helpers: $(PHP_SRC_DIR)\ext\standard\tests\helpers\bad_cmd.exe
 
 !if $(PHP_TEST_INI_PATH) == ""
 test: set-tmp-env

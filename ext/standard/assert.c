@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Thies C. Arntzen <thies@thieso.net>                          |
    +----------------------------------------------------------------------+
@@ -34,17 +32,16 @@ ZEND_DECLARE_MODULE_GLOBALS(assert)
 
 #define ASSERTG(v) ZEND_MODULE_GLOBALS_ACCESSOR(assert, v)
 
-#define SAFE_STRING(s) ((s)?(s):"")
-
-enum {
-	ASSERT_ACTIVE=1,
-	ASSERT_CALLBACK,
-	ASSERT_BAIL,
-	ASSERT_WARNING,
-	ASSERT_EXCEPTION
-};
-
 PHPAPI zend_class_entry *assertion_error_ce;
+
+/* Hack to pass a custom stage for the our OnModify handler so that a deprecation warning does not get emitted
+ * when an option is modified via assert_option() function */
+#define ZEND_INI_STAGE_ASSERT_OPTIONS (1<<6)
+
+static inline bool php_must_emit_ini_deprecation(int stage)
+{
+	return stage != ZEND_INI_STAGE_DEACTIVATE && stage != ZEND_INI_STAGE_SHUTDOWN && stage != ZEND_INI_STAGE_ASSERT_OPTIONS;
+}
 
 static PHP_INI_MH(OnChangeCallback) /* {{{ */
 {
@@ -54,6 +51,9 @@ static PHP_INI_MH(OnChangeCallback) /* {{{ */
 			ZVAL_UNDEF(&ASSERTG(callback));
 		}
 		if (new_value && (Z_TYPE(ASSERTG(callback)) != IS_UNDEF || ZSTR_LEN(new_value))) {
+			if (php_must_emit_ini_deprecation(stage)) {
+				php_error_docref(NULL, E_DEPRECATED, "assert.callback INI setting is deprecated");
+			}
 			ZVAL_STR_COPY(&ASSERTG(callback), new_value);
 		}
 	} else {
@@ -61,6 +61,9 @@ static PHP_INI_MH(OnChangeCallback) /* {{{ */
 			pefree(ASSERTG(cb), 1);
 		}
 		if (new_value && ZSTR_LEN(new_value)) {
+			if (php_must_emit_ini_deprecation(stage)) {
+				php_error_docref(NULL, E_DEPRECATED, "assert.callback INI setting is deprecated");
+			}
 			ASSERTG(cb) = pemalloc(ZSTR_LEN(new_value) + 1, 1);
 			memcpy(ASSERTG(cb), ZSTR_VAL(new_value), ZSTR_LEN(new_value));
 			ASSERTG(cb)[ZSTR_LEN(new_value)] = '\0';
@@ -72,12 +75,54 @@ static PHP_INI_MH(OnChangeCallback) /* {{{ */
 }
 /* }}} */
 
+static PHP_INI_MH(OnUpdateActiveBool)
+{
+	bool *p = ZEND_INI_GET_ADDR();
+	*p = zend_ini_parse_bool(new_value);
+	if (php_must_emit_ini_deprecation(stage) && !*p) {
+		php_error_docref(NULL, E_DEPRECATED, "assert.active INI setting is deprecated");
+	}
+	return SUCCESS;
+}
+
+static PHP_INI_MH(OnUpdateBailBool)
+{
+	bool *p = ZEND_INI_GET_ADDR();
+	*p = zend_ini_parse_bool(new_value);
+	if (php_must_emit_ini_deprecation(stage) && *p) {
+		php_error_docref(NULL, E_DEPRECATED, "assert.bail INI setting is deprecated");
+	}
+	return SUCCESS;
+}
+
+static PHP_INI_MH(OnUpdateExceptionBool)
+{
+	bool *p = ZEND_INI_GET_ADDR();
+	*p = zend_ini_parse_bool(new_value);
+	if (php_must_emit_ini_deprecation(stage) && !*p) {
+		php_error_docref(NULL, E_DEPRECATED, "assert.exception INI setting is deprecated");
+	}
+	return SUCCESS;
+}
+
+
+static PHP_INI_MH(OnUpdateWarningBool)
+{
+	bool *p = ZEND_INI_GET_ADDR();
+	*p = zend_ini_parse_bool(new_value);
+	if (php_must_emit_ini_deprecation(stage) && !*p) {
+		php_error_docref(NULL, E_DEPRECATED, "assert.warning INI setting is deprecated");
+	}
+	return SUCCESS;
+}
+
+
 PHP_INI_BEGIN()
-	 STD_PHP_INI_BOOLEAN("assert.active",		"1",	PHP_INI_ALL,	OnUpdateBool,		active,	 			zend_assert_globals,		assert_globals)
-	 STD_PHP_INI_BOOLEAN("assert.bail",		"0",	PHP_INI_ALL,	OnUpdateBool,		bail,	 			zend_assert_globals,		assert_globals)
-	 STD_PHP_INI_BOOLEAN("assert.warning",	"1",	PHP_INI_ALL,	OnUpdateBool,		warning, 			zend_assert_globals,		assert_globals)
-	 PHP_INI_ENTRY("assert.callback",		NULL,	PHP_INI_ALL,	OnChangeCallback)
-	 STD_PHP_INI_BOOLEAN("assert.exception",	"1",	PHP_INI_ALL,	OnUpdateBool,		exception, 			zend_assert_globals,		assert_globals)
+	 STD_PHP_INI_BOOLEAN("assert.active",    "1",  PHP_INI_ALL,	OnUpdateActiveBool,		active,	 			zend_assert_globals,		assert_globals)
+	 STD_PHP_INI_BOOLEAN("assert.bail",      "0",  PHP_INI_ALL,	OnUpdateBailBool,		bail,	 			zend_assert_globals,		assert_globals)
+	 STD_PHP_INI_BOOLEAN("assert.warning",   "1",  PHP_INI_ALL,	OnUpdateWarningBool,		warning, 			zend_assert_globals,		assert_globals)
+	 PHP_INI_ENTRY("assert.callback",        NULL, PHP_INI_ALL,	OnChangeCallback)
+	 STD_PHP_INI_BOOLEAN("assert.exception", "1",  PHP_INI_ALL,	OnUpdateExceptionBool,		exception, 			zend_assert_globals,		assert_globals)
 PHP_INI_END()
 
 static void php_assert_init_globals(zend_assert_globals *assert_globals_p) /* {{{ */
@@ -92,12 +137,6 @@ PHP_MINIT_FUNCTION(assert) /* {{{ */
 	ZEND_INIT_MODULE_GLOBALS(assert, php_assert_init_globals, NULL);
 
 	REGISTER_INI_ENTRIES();
-
-	REGISTER_LONG_CONSTANT("ASSERT_ACTIVE", ASSERT_ACTIVE, CONST_CS|CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("ASSERT_CALLBACK", ASSERT_CALLBACK, CONST_CS|CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("ASSERT_BAIL", ASSERT_BAIL, CONST_CS|CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("ASSERT_WARNING", ASSERT_WARNING, CONST_CS|CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("ASSERT_EXCEPTION", ASSERT_EXCEPTION, CONST_CS|CONST_PERSISTENT);
 
 	return SUCCESS;
 }
@@ -137,7 +176,11 @@ PHP_FUNCTION(assert)
 	zend_string *description_str = NULL;
 	zend_object *description_obj = NULL;
 
-	if (!ASSERTG(active)) {
+	/* EG(assertions) <= 0 is only reachable by dynamic calls to assert(),
+	 * since calls known at compile time will skip the entire call when
+	 * assertions are disabled.
+	 */
+	if (!ASSERTG(active) || EG(assertions) <= 0) {
 		RETURN_TRUE;
 	}
 
@@ -152,8 +195,7 @@ PHP_FUNCTION(assert)
 	}
 
 	if (description_obj) {
-		GC_ADDREF(description_obj);
-		zend_throw_exception_internal(description_obj);
+		zend_throw_exception_internal(zend_object_copy(description_obj));
 		RETURN_THROWS();
 	}
 
@@ -165,9 +207,12 @@ PHP_FUNCTION(assert)
 		zval args[4];
 		zval retval;
 		uint32_t lineno = zend_get_executed_lineno();
-		const char *filename = zend_get_executed_filename();
+		zend_string *filename = zend_get_executed_filename_ex();
+		if (UNEXPECTED(!filename)) {
+			filename = ZSTR_KNOWN(ZEND_STR_UNKNOWN_CAPITALIZED);
+		}
 
-		ZVAL_STRING(&args[0], SAFE_STRING(filename));
+		ZVAL_STR(&args[0], filename);
 		ZVAL_LONG(&args[1], lineno);
 		ZVAL_NULL(&args[2]);
 
@@ -180,7 +225,6 @@ PHP_FUNCTION(assert)
 			call_user_function(NULL, NULL, &ASSERTG(callback), &retval, 3, args);
 		}
 
-		zval_ptr_dtor(&args[0]);
 		zval_ptr_dtor(&retval);
 	}
 
@@ -191,11 +235,18 @@ PHP_FUNCTION(assert)
 			zend_exception_error(EG(exception), E_ERROR);
 		}
 	} else if (ASSERTG(warning)) {
-		php_error_docref(NULL, E_WARNING, "%s failed", description_str ? ZSTR_VAL(description_str) : "Assertion failed");
+		php_error_docref(NULL, E_WARNING, "%s failed", description_str ? ZSTR_VAL(description_str) : "Assertion");
 	}
 
 	if (ASSERTG(bail)) {
-		zend_throw_unwind_exit();
+		if (EG(exception)) {
+			/* The callback might have thrown. Use E_WARNING to print the
+			 * exception so we can avoid bailout and use unwind_exit. */
+			zend_exception_error(EG(exception), E_WARNING);
+		}
+		if (!EG(exception)) {
+			zend_throw_unwind_exit();
+		}
 		RETURN_THROWS();
 	} else {
 		RETURN_FALSE;
@@ -209,7 +260,7 @@ PHP_FUNCTION(assert_options)
 	zval *value = NULL;
 	zend_long what;
 	bool oldint;
-	int ac = ZEND_NUM_ARGS();
+	uint32_t ac = ZEND_NUM_ARGS();
 	zend_string *key;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
@@ -219,7 +270,7 @@ PHP_FUNCTION(assert_options)
 	ZEND_PARSE_PARAMETERS_END();
 
 	switch (what) {
-	case ASSERT_ACTIVE:
+	case PHP_ASSERT_ACTIVE:
 		oldint = ASSERTG(active);
 		if (ac == 2) {
 			zend_string *value_str = zval_try_get_string(value);
@@ -227,15 +278,14 @@ PHP_FUNCTION(assert_options)
 				RETURN_THROWS();
 			}
 
-			key = zend_string_init("assert.active", sizeof("assert.active")-1, 0);
-			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, PHP_INI_STAGE_RUNTIME, 0);
+			key = ZSTR_INIT_LITERAL("assert.active", 0);
+			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, ZEND_INI_STAGE_ASSERT_OPTIONS, 0);
 			zend_string_release_ex(key, 0);
 			zend_string_release_ex(value_str, 0);
 		}
 		RETURN_LONG(oldint);
-		break;
 
-	case ASSERT_BAIL:
+	case PHP_ASSERT_BAIL:
 		oldint = ASSERTG(bail);
 		if (ac == 2) {
 			zend_string *value_str = zval_try_get_string(value);
@@ -243,15 +293,14 @@ PHP_FUNCTION(assert_options)
 				RETURN_THROWS();
 			}
 
-			key = zend_string_init("assert.bail", sizeof("assert.bail")-1, 0);
-			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, PHP_INI_STAGE_RUNTIME, 0);
+			key = ZSTR_INIT_LITERAL("assert.bail", 0);
+			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, ZEND_INI_STAGE_ASSERT_OPTIONS, 0);
 			zend_string_release_ex(key, 0);
 			zend_string_release_ex(value_str, 0);
 		}
 		RETURN_LONG(oldint);
-		break;
 
-	case ASSERT_WARNING:
+	case PHP_ASSERT_WARNING:
 		oldint = ASSERTG(warning);
 		if (ac == 2) {
 			zend_string *value_str = zval_try_get_string(value);
@@ -259,15 +308,14 @@ PHP_FUNCTION(assert_options)
 				RETURN_THROWS();
 			}
 
-			key = zend_string_init("assert.warning", sizeof("assert.warning")-1, 0);
-			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, PHP_INI_STAGE_RUNTIME, 0);
+			key = ZSTR_INIT_LITERAL("assert.warning", 0);
+			zend_alter_ini_entry_ex(key, value_str, PHP_INI_USER, ZEND_INI_STAGE_ASSERT_OPTIONS, 0);
 			zend_string_release_ex(key, 0);
 			zend_string_release_ex(value_str, 0);
 		}
 		RETURN_LONG(oldint);
-		break;
 
-	case ASSERT_CALLBACK:
+	case PHP_ASSERT_CALLBACK:
 		if (Z_TYPE(ASSERTG(callback)) != IS_UNDEF) {
 			ZVAL_COPY(return_value, &ASSERTG(callback));
 		} else if (ASSERTG(cb)) {
@@ -286,7 +334,7 @@ PHP_FUNCTION(assert_options)
 		}
 		return;
 
-	case ASSERT_EXCEPTION:
+	case PHP_ASSERT_EXCEPTION:
 		oldint = ASSERTG(exception);
 		if (ac == 2) {
 			zend_string *val = zval_try_get_string(value);
@@ -294,13 +342,12 @@ PHP_FUNCTION(assert_options)
 				RETURN_THROWS();
 			}
 
-			key = zend_string_init("assert.exception", sizeof("assert.exception")-1, 0);
-			zend_alter_ini_entry_ex(key, val, PHP_INI_USER, PHP_INI_STAGE_RUNTIME, 0);
+			key = ZSTR_INIT_LITERAL("assert.exception", 0);
+			zend_alter_ini_entry_ex(key, val, PHP_INI_USER, ZEND_INI_STAGE_ASSERT_OPTIONS, 0);
 			zend_string_release_ex(val, 0);
 			zend_string_release_ex(key, 0);
 		}
 		RETURN_LONG(oldint);
-		break;
 
 	default:
 		zend_argument_value_error(1, "must be an ASSERT_* constant");

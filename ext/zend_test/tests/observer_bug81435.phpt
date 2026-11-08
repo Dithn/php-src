@@ -1,10 +1,10 @@
 --TEST--
-Bug #81435 (Observer current_observed_frame may point to an old (overwritten) frame)
+Bug #81435 (Observer EG(current_observed_frame) may point to an old (overwritten) frame)
 --EXTENSIONS--
 zend_test
 --INI--
-memory_limit=20M
 zend_test.observer.enabled=1
+zend_test.observer.show_output=1
 zend_test.observer.observe_function_names=a,d
 opcache.optimization_level=0
 --FILE--
@@ -21,7 +21,7 @@ function b() {
 }
 
 function bailout(...$args) {
-    array_map("str_repeat", ["\xFF"], [100000000]);
+    var_dump(new class { public function __debugInfo() { return ''; } }); // cause a bailout
 }
 
 function a() { // observed (first_observed_frame)
@@ -42,6 +42,8 @@ a();
   <d>
   </d>
   <!-- init bailout() -->
+  <!-- init var_dump() -->
+  <!-- init class@anonymous::__debugInfo() -->
 
-Fatal error: Allowed memory size of 20971520 bytes exhausted %s in %s on line %d
+Fatal error: __debugInfo() must return an array in %s on line %d
 </a>

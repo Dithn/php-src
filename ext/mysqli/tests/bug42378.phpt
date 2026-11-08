@@ -4,13 +4,13 @@ Bug #42378 (bind_result memory exhaustion, SELECT column, FORMAT(...) AS _format
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --INI--
 memory_limit=83886080
 --FILE--
 <?php
-    require_once("connect.inc");
+    require_once 'connect.inc';
 
     function create_table($link, $column, $min, $max, $engine, $offset) {
 
@@ -50,12 +50,6 @@ memory_limit=83886080
 
     function test_format($link, $format, $from, $order_by, $expected, $offset) {
 
-        if (!$stmt = mysqli_stmt_init($link)) {
-            printf("[%03d] Cannot create PS, [%d] %s\n",
-                $offset,
-                mysqli_errno($link), mysqli_error($link));
-            return false;
-        }
         print "$format\n";
 
         if ($order_by)
@@ -63,10 +57,10 @@ memory_limit=83886080
         else
             $sql = sprintf('SELECT %s AS _format FROM %s', $format, $from);
 
-        if (!mysqli_stmt_prepare($stmt, $sql)) {
+        if (!$stmt = mysqli_prepare($link, $sql)) {
             printf("[%03d] Cannot prepare PS, [%d] %s\n",
                 $offset + 1,
-                mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
+                mysqli_errno($link), mysqli_error($link));
             return false;
         }
 
@@ -182,7 +176,7 @@ memory_limit=83886080
 ?>
 --CLEAN--
 <?php
-	require_once("clean_table.inc");
+	require_once 'clean_table.inc';
 ?>
 --EXPECT--
 FLOAT

@@ -72,7 +72,7 @@ array(26) {
   [5]=>
   int(%d)
   [6]=>
-  int(%d)
+  int(%i)
   [7]=>
   int(%d)
   [8]=>
@@ -98,7 +98,7 @@ array(26) {
   ["gid"]=>
   int(%d)
   ["rdev"]=>
-  int(%d)
+  int(%i)
   ["size"]=>
   int(%d)
   ["atime"]=>
@@ -128,7 +128,7 @@ array(26) {
   [5]=>
   int(%d)
   [6]=>
-  int(%d)
+  int(%i)
   [7]=>
   int(%d)
   [8]=>
@@ -154,7 +154,7 @@ array(26) {
   ["gid"]=>
   int(%d)
   ["rdev"]=>
-  int(%d)
+  int(%i)
   ["size"]=>
   int(%d)
   ["atime"]=>
@@ -182,7 +182,7 @@ array(26) {
   [5]=>
   int(%d)
   [6]=>
-  int(%d)
+  int(%i)
   [7]=>
   int(%d)
   [8]=>
@@ -208,7 +208,7 @@ array(26) {
   ["gid"]=>
   int(%d)
   ["rdev"]=>
-  int(%d)
+  int(%i)
   ["size"]=>
   int(%d)
   ["atime"]=>
@@ -236,7 +236,7 @@ array(26) {
   [5]=>
   int(%d)
   [6]=>
-  int(%d)
+  int(%i)
   [7]=>
   int(%d)
   [8]=>
@@ -262,7 +262,7 @@ array(26) {
   ["gid"]=>
   int(%d)
   ["rdev"]=>
-  int(%d)
+  int(%i)
   ["size"]=>
   int(%d)
   ["atime"]=>

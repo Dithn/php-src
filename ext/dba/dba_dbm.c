@@ -1,32 +1,30 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Sascha Schumann <sascha@schumann.cx>                         |
    +----------------------------------------------------------------------+
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_DBM
+#ifdef DBA_DBM
 #include "php_dbm.h"
 
 #ifdef DBM_INCLUDE_FILE
 #include DBM_INCLUDE_FILE
 #endif
-#if DBA_GDBM
+#ifdef DBA_GDBM
 #include "php_gdbm.h"
 #endif
 
@@ -36,7 +34,7 @@
 #include <fcntl.h>
 
 #define TRUNC_IT(extension, mode) \
-	snprintf(buf, MAXPATHLEN, "%s" extension, info->path); \
+	snprintf(buf, MAXPATHLEN, "%s" extension, ZSTR_VAL(info->path)); \
 	buf[MAXPATHLEN-1] = '\0'; \
 	if((fd = VCWD_OPEN_MODE(buf, O_CREAT | mode | O_WRONLY, filemode)) == -1) \
 		return FAILURE; \
@@ -67,7 +65,7 @@ DBA_OPEN_FUNC(dbm)
 		TRUNC_IT(".dir", 0);
 	}
 
-	if(dbminit((char *) info->path) == -1) {
+	if(dbminit((char *) ZSTR_VAL(info->path)) == -1) {
 		return FAILURE;
 	}
 
@@ -188,13 +186,13 @@ DBA_SYNC_FUNC(dbm)
 
 DBA_INFO_FUNC(dbm)
 {
-#if DBA_GDBM
+#ifdef DBA_GDBM
 	if (!strcmp(DBM_VERSION, "GDBM"))
 	{
 		return dba_info_gdbm(hnd, info);
 	}
 #endif
-	return estrdup(DBM_VERSION);
+	return DBM_VERSION;
 }
 
 #endif

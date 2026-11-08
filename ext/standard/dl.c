@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Brian Schaffner <brian@tool.net>                            |
    |          Shane Caraveo <shane@caraveo.com>                           |
@@ -24,7 +22,7 @@
 
 #include "SAPI.h"
 
-#if defined(HAVE_LIBDL)
+#ifdef HAVE_LIBDL
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,7 +43,7 @@ PHPAPI PHP_FUNCTION(dl)
 	size_t filename_len;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STRING(filename, filename_len)
+		Z_PARAM_PATH(filename, filename_len)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (!PG(enable_dl)) {
@@ -58,14 +56,26 @@ PHPAPI PHP_FUNCTION(dl)
 		RETURN_FALSE;
 	}
 
+#if ZEND_RC_DEBUG
+	bool orig_rc_debug = zend_rc_debug;
+	/* FIXME: Loading extensions during the request breaks some invariants. In
+	 * particular, it will create persistent interned strings, which is not
+	 * allowed at this stage. */
+	zend_rc_debug = false;
+#endif
+
 	php_dl(filename, MODULE_TEMPORARY, return_value, 0);
 	if (Z_TYPE_P(return_value) == IS_TRUE) {
 		EG(full_tables_cleanup) = 1;
 	}
+
+#if ZEND_RC_DEBUG
+	zend_rc_debug = orig_rc_debug;
+#endif
 }
 /* }}} */
 
-#if defined(HAVE_LIBDL)
+#ifdef HAVE_LIBDL
 
 /* {{{ php_load_shlib */
 PHPAPI void *php_load_shlib(const char *path, char **errp)
@@ -81,7 +91,7 @@ PHPAPI void *php_load_shlib(const char *path, char **errp)
 			size_t i = strlen(err);
 			(*errp)=estrdup(err);
 			php_win32_error_msg_free(err);
-			while (i > 0 && isspace((*errp)[i-1])) { (*errp)[i-1] = '\0'; i--; }
+			while (i > 0 && isspace((unsigned char)(*errp)[i-1])) { (*errp)[i-1] = '\0'; i--; }
 		} else {
 			(*errp) = estrdup("<No message>");
 		}
@@ -102,11 +112,11 @@ PHPAPI int php_load_extension(const char *filename, int type, int start_now)
 	zend_module_entry *module_entry;
 	zend_module_entry *(*get_module)(void);
 	int error_type, slash_suffix = 0;
-	char *extension_dir;
+	const char *extension_dir;
 	char *err1, *err2;
 
 	if (type == MODULE_PERSISTENT) {
-		extension_dir = INI_STR("extension_dir");
+		extension_dir = zend_ini_string_literal("extension_dir");
 	} else {
 		extension_dir = PG(extension_dir);
 	}
@@ -165,7 +175,7 @@ PHPAPI int php_load_extension(const char *filename, int type, int start_now)
 
 #ifdef PHP_WIN32
 	if (!php_win32_image_compatible(handle, &err1)) {
-			php_error_docref(NULL, error_type, err1);
+			php_error_docref(NULL, error_type, "%s", err1);
 			efree(err1);
 			DL_UNLOAD(handle);
 			return FAILURE;
@@ -193,6 +203,11 @@ PHPAPI int php_load_extension(const char *filename, int type, int start_now)
 		return FAILURE;
 	}
 	module_entry = get_module();
+	if (zend_hash_str_exists(&module_registry, module_entry->name, strlen(module_entry->name))) {
+		zend_error(E_CORE_WARNING, "Module \"%s\" is already loaded", module_entry->name);
+		DL_UNLOAD(handle);
+		return FAILURE;
+	}
 	if (module_entry->zend_api != ZEND_MODULE_API_NO) {
 			php_error_docref(NULL, error_type,
 					"%s: Unable to initialize module\n"
@@ -213,14 +228,13 @@ PHPAPI int php_load_extension(const char *filename, int type, int start_now)
 		DL_UNLOAD(handle);
 		return FAILURE;
 	}
-	module_entry->type = type;
-	module_entry->module_number = zend_next_free_module();
-	module_entry->handle = handle;
 
-	if ((module_entry = zend_register_module_ex(module_entry)) == NULL) {
+	if ((module_entry = zend_register_module_ex(module_entry, type)) == NULL) {
 		DL_UNLOAD(handle);
 		return FAILURE;
 	}
+
+	module_entry->handle = handle;
 
 	if ((type == MODULE_TEMPORARY || start_now) && zend_startup_module_ex(module_entry) == FAILURE) {
 		DL_UNLOAD(handle);

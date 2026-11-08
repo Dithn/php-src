@@ -34,8 +34,8 @@ $testClassInstance = new TestClass();
 $testClassInstance->prop = "Hello";
 
 $foo = new ReflectionMethod($testClassInstance, 'foo');
-$staticMethod = new ReflectionMethod('TestClass::staticMethod');
-$privateMethod = new ReflectionMethod("TestClass::privateMethod");
+$staticMethod = ReflectionMethod::createFromMethodName('TestClass::staticMethod');
+$privateMethod = new ReflectionMethod("TestClass", "privateMethod");
 
 echo "\nNon-instance:\n";
 try {
@@ -52,7 +52,7 @@ echo "\nPrivate method:\n";
 var_dump($privateMethod->invokeArgs($testClassInstance, array()));
 
 echo "\nAbstract method:\n";
-$abstractMethod = new ReflectionMethod("AbstractClass::foo");
+$abstractMethod = new ReflectionMethod("AbstractClass", "foo");
 try {
     $abstractMethod->invokeArgs($testClassInstance, array());
 } catch (ReflectionException $e) {
@@ -65,7 +65,7 @@ try {
 }
 
 ?>
---EXPECT--
+--EXPECTF--
 Non-instance:
 string(72) "Given object is not an instance of the class this method was declared in"
 
@@ -75,6 +75,8 @@ Exception: Using $this when not in object context
 NULL
 
 Private method:
+
+Deprecated: Calling ReflectionMethod::invokeArgs() for static method TestClass::privateMethod() does not need an object parameter in %s on line %d
 Called privateMethod()
 NULL
 

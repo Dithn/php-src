@@ -1,3 +1,17 @@
+/*
+   +----------------------------------------------------------------------+
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
+   +----------------------------------------------------------------------+
+   | Authors: Gustavo Lopes    <cataphract@php.net>                       |
+   +----------------------------------------------------------------------+
+ */
+
 #ifndef PHP_SENDRECVMSG_H
 #define PHP_SENDRECVMSG_H 1
 
@@ -5,6 +19,11 @@
 #include "conversions.h"
 
 /* for sockets.c */
+
+#ifdef PHP_WIN32
+#define IPV6_RECVPKTINFO	IPV6_PKTINFO
+#define IPV6_RECVHOPLIMIT	IPV6_HOPLIMIT
+#endif
 
 void php_socket_sendrecvmsg_init(INIT_FUNC_ARGS);
 void php_socket_sendrecvmsg_shutdown(SHUTDOWN_FUNC_ARGS);

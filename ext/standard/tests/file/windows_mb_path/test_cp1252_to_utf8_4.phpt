@@ -1,13 +1,11 @@
 --TEST--
 Test mkdir/rmdir cp1252 to UTF-8 path
+--EXTENSIONS--
+iconv
 --SKIPIF--
 <?php
-include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
-
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
-
 ?>
 --CONFLICTS--
 dir2_cp1252
@@ -21,10 +19,10 @@ dir2_cp1252
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = iconv('cp1252', 'utf-8', "Voláçao"); // cp1252 string
-$prefix = create_data("dir2_cp1252", "${item}3");
-$path = $prefix . DIRECTORY_SEPARATOR . "${item}3";
+$prefix = create_data("dir2_cp1252", "{$item}3");
+$path = $prefix . DIRECTORY_SEPARATOR . "{$item}3";
 
-$subpath = $path . DIRECTORY_SEPARATOR . "${item}4";
+$subpath = $path . DIRECTORY_SEPARATOR . "{$item}4";
 
 /* The mb dirname exists*/
 var_dump(file_exists($path));

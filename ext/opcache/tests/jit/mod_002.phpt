@@ -4,7 +4,6 @@ JIT MOD: 002
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 opcache.protect_memory=1
 --EXTENSIONS--
 opcache
@@ -33,13 +32,14 @@ var_dump(modNeg33(125));
 var_dump(modNeg33(-125));
 try {
     var_dump(modNeg1(125));
+    var_dump(modNeg1(PHP_INT_MIN));
 } catch (Throwable $e) {
-    echo "Exception " . $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(mod0(125));
 } catch (Throwable $e) {
-    echo "Exception (" . get_class($e) . "): " . $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
@@ -50,4 +50,5 @@ int(-29)
 int(26)
 int(-26)
 int(0)
-Exception (DivisionByZeroError): Modulo by zero
+int(0)
+DivisionByZeroError: Modulo by zero

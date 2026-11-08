@@ -3,6 +3,12 @@ libxml_disable_entity_loader()
 --EXTENSIONS--
 libxml
 dom
+xml
+simplexml
+--SKIPIF--
+<?php
+if (preg_match('/[^\x00-\x7F]/', __DIR__)) die('skip path contains non-ASCII characters that libxml URI parser rejects');
+?>
 --FILE--
 <?php
 
@@ -28,7 +34,6 @@ function parseXML2($xml) {
 function parseXML3($xml) {
   $p = xml_parser_create();
   xml_parse_into_struct($p, $xml, $vals, $index);
-  xml_parser_free($p);
   return var_export($vals, true);
 }
 

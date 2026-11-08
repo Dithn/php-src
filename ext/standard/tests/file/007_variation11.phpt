@@ -44,6 +44,7 @@ unlink($file);  //Deleting the file
 fclose( fopen($file, "wt") );  //Opening the non-existing file in "wt" mode, which will be created
 var_dump( file_exists($file) );  //Check for the existence of file
 echo "*** Done ***\n";
+?>
 --CLEAN--
 <?php
 unlink(__DIR__."/007_variation11.tmp");
@@ -56,7 +57,7 @@ int(0)
 int(37)
 int(37)
 
-Notice: fread(): Read of 8192 bytes failed with errno=9 Bad file descriptor in %s on line %d
+Notice: fread(): Read of 8192 bytes failed with errno=9 Bad file %r(descriptor|number)%r in %s on line %d
 bool(false)
 int(0)
 bool(true)

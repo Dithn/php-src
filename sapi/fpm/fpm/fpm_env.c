@@ -11,6 +11,7 @@
 
 #include "fpm_env.h"
 #include "fpm.h"
+#include "fpm_cleanup.h"
 
 #ifndef HAVE_SETPROCTITLE
 #if defined(__linux__) || defined(__APPLE__)
@@ -19,48 +20,8 @@ static size_t fpm_env_argv_len = 0;
 #endif
 #endif
 
-#ifndef HAVE_SETENV
-# ifdef (__sparc__ || __sparc)
-int setenv(char *name, char *value, int clobber) /* {{{ */
-{
-	char   *malloc();
-	char   *getenv();
-	char   *cp;
-
-	if (clobber == 0 && getenv(name) != 0) {
-		return 0;
-	}
-
-	if ((cp = malloc(strlen(name) + strlen(value) + 2)) == 0) {
-		return 1;
-	}
-	sprintf(cp, "%s=%s", name, value);
-	return putenv(cp);
-}
-/* }}} */
-# else
-int setenv(char *name, char *value, int overwrite) /* {{{ */
-{
-	int name_len = strlen(name);
-	int value_len = strlen(value);
-	char *var = alloca(name_len + 1 + value_len + 1);
-
-	memcpy(var, name, name_len);
-
-	var[name_len] = '=';
-
-	memcpy(var + name_len + 1, value, value_len);
-
-	var[name_len + 1 + value_len] = '\0';
-
-	return putenv(var);
-}
-/* }}} */
-# endif
-#endif
-
 #ifndef HAVE_CLEARENV
-void clearenv() /* {{{ */
+void clearenv(void)
 {
 	char **envp;
 	char *s;
@@ -79,41 +40,6 @@ void clearenv() /* {{{ */
 	}
 
 }
-/* }}} */
-#endif
-
-#ifndef HAVE_UNSETENV
-void unsetenv(const char *name) /* {{{ */
-{
-	if(getenv(name) != NULL) {
-		int ct = 0;
-		int del = 0;
-
-		while(environ[ct] != NULL) {
-			if (nvmatch(name, environ[ct]) != 0) del=ct; /* <--- WTF?! */
-			{ ct++; } /* <--- WTF?! */
-		}
-		/* isn't needed free here?? */
-		environ[del] = environ[ct-1];
-		environ[ct-1] = NULL;
-	}
-}
-/* }}} */
-
-static char * nvmatch(char *s1, char *s2) /* {{{ */
-{
-	while(*s1 == *s2++)
-	{
-		if(*s1++ == '=') {
-			return s2;
-		}
-	}
-	if(*s1 == '\0' && *(s2-1) == '=') {
-		return s2;
-	}
-	return NULL;
-}
-/* }}} */
 #endif
 
 void fpm_env_setproctitle(char *title) /* {{{ */
@@ -195,7 +121,27 @@ static int fpm_env_conf_wp(struct fpm_worker_pool_s *wp) /* {{{ */
 }
 /* }}} */
 
-int fpm_env_init_main() /* {{{ */
+
+#ifndef HAVE_SETPROCTITLE
+#if defined(__linux__) || defined(__APPLE__)
+/* Frees our copied environment variables. */
+static void fpm_env_cleanup(int which, void *arg) /* {{{ */
+{
+	char** allocated_environ = environ;
+	if (allocated_environ) {
+		environ = NULL;
+		unsigned int i = 0;
+		while (allocated_environ[i]) {
+			free(allocated_environ[i]);
+			i++;
+		}
+		free(allocated_environ);
+	}
+}
+#endif
+#endif
+
+int fpm_env_init_main(void)
 {
 	struct fpm_worker_pool_s *wp;
 	char *title;
@@ -255,6 +201,10 @@ int fpm_env_init_main() /* {{{ */
 			env_nb++;
 		}
 
+		if (0 > fpm_cleanup_add(FPM_CLEANUP_PARENT_EXIT_MAIN, fpm_env_cleanup, 0)) {
+			return -1;
+		}
+
 		if ((new_environ = malloc((1U + env_nb) * sizeof (char *))) == NULL) {
 			return -1;
 		}
@@ -273,4 +223,3 @@ int fpm_env_init_main() /* {{{ */
 	efree(title);
 	return 0;
 }
-/* }}} */

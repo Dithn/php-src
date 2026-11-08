@@ -4,19 +4,11 @@ mysqli_stmt_execute()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
-if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
-    die(sprintf('skip Cannot connect to MySQL, [%d] %s.', mysqli_connect_errno(), mysqli_connect_error()));
-}
-if (mysqli_get_server_version($link) <= 40100) {
-    die(sprintf('skip Needs MySQL 4.1+, found version %d.', mysqli_get_server_version($link)));
-}
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once("connect.inc");
-
-    require('table.inc');
+    require 'table.inc';
 
     if (!$stmt = mysqli_stmt_init($link))
         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
@@ -62,11 +54,8 @@ if (mysqli_get_server_version($link) <= 40100) {
 
     // calling reset between executions
     mysqli_stmt_close($stmt);
-    if (!$stmt = mysqli_stmt_init($link))
+    if (!$stmt = mysqli_prepare($link, "SELECT id FROM test ORDER BY id LIMIT ?"))
         printf("[013] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
-
-    if (!mysqli_stmt_prepare($stmt, "SELECT id FROM test ORDER BY id LIMIT ?"))
-        printf("[014] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
     $limit = 1;
     if (!mysqli_stmt_bind_param($stmt, "i", $limit))
@@ -99,11 +88,8 @@ if (mysqli_get_server_version($link) <= 40100) {
         printf("[022] Expecting int/1 got %s/%s\n", gettype($id), $id);
 
     mysqli_stmt_close($stmt);
-    if (!$stmt = mysqli_stmt_init($link))
+    if (!$stmt = mysqli_prepare($link, "SELECT id FROM test ORDER BY id LIMIT 1"))
         printf("[023] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
-
-    if (!mysqli_stmt_prepare($stmt, "SELECT id FROM test ORDER BY id LIMIT 1"))
-        printf("[024] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
     if (true !== ($tmp = mysqli_stmt_execute($stmt)))
         printf("[025] Expecting boolean/true, got %s/%s. [%d] %s\n",
@@ -116,7 +102,7 @@ if (mysqli_get_server_version($link) <= 40100) {
     var_dump(mysqli_stmt_execute($stmt));
     var_dump(mysqli_stmt_fetch($stmt));
 
-    mysqli_kill($link, mysqli_thread_id($link));
+    $link->query('KILL '.mysqli_thread_id($link));
 
     if (false !== ($tmp = mysqli_stmt_execute($stmt)))
         printf("[027] Expecting boolean/false, got %s/%s\n", gettype($tmp), $tmp);
@@ -134,9 +120,10 @@ if (mysqli_get_server_version($link) <= 40100) {
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+require_once 'clean_table.inc';
 ?>
---EXPECT--
+--EXPECTF--
+Deprecated: Function mysqli_stmt_init() is deprecated since 8.6, use mysqli_prepare() instead in %s on line %d
 mysqli_stmt object is not fully initialized
 mysqli_stmt object is not fully initialized
 bool(true)

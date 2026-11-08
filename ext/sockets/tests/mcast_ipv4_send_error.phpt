@@ -14,6 +14,7 @@ if ($s === false) {
 if (socket_set_option($s, $level, IP_MULTICAST_IF, 1) === false) {
     die("skip interface 1 either doesn't exist or has no ipv4 address");
 }
+?>
 --FILE--
 <?php
 $domain = AF_INET;
@@ -41,8 +42,8 @@ echo "Setting IP_MULTICAST_TTL with 256\n";
 try {
     $r = socket_set_option($s, $level, IP_MULTICAST_TTL, 256);
     var_dump($r);
-} catch (\ValueError $e) {
-    echo $e->getMessage() . \PHP_EOL;
+} catch (\Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 $r = socket_get_option($s, $level, IP_MULTICAST_TTL);
 var_dump($r);
@@ -60,8 +61,8 @@ echo "Setting IP_MULTICAST_TTL with -1\n";
 try {
     $r = socket_set_option($s, $level, IP_MULTICAST_TTL, -1);
     var_dump($r);
-} catch (\ValueError $e) {
-    echo $e->getMessage() . \PHP_EOL;
+} catch (\Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 $r = socket_get_option($s, $level, IP_MULTICAST_TTL);
 var_dump($r);
@@ -77,7 +78,7 @@ bool(true)
 int(0)
 
 Setting IP_MULTICAST_TTL with 256
-socket_set_option(): Argument #4 ($value) must be between 0 and 255
+ValueError: socket_set_option(): Argument #4 ($value) must be between 0 and 255
 int(1)
 
 Setting IP_MULTICAST_TTL with "254"
@@ -85,5 +86,5 @@ bool(true)
 int(254)
 
 Setting IP_MULTICAST_TTL with -1
-socket_set_option(): Argument #4 ($value) must be between 0 and 255
+ValueError: socket_set_option(): Argument #4 ($value) must be between 0 and 255
 int(254)

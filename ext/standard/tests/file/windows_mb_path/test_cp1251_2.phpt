@@ -4,9 +4,8 @@ Test fopen() for write CP1251 path
 <?php
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
 skip_if_wrong_cp(1251, "ansi");
 
 ?>
@@ -25,7 +24,7 @@ include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = "привет"; // cp1251 string
 $prefix = create_data("file_cp1251", $item . "7", 1251);
-$fn = $prefix . DIRECTORY_SEPARATOR . "${item}7";
+$fn = $prefix . DIRECTORY_SEPARATOR . "{$item}7";
 
 $f = fopen($fn, 'w');
 if ($f) {

@@ -4,7 +4,6 @@ ASSIGN_OBJ on null reference returned from __get()
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --FILE--
 <?php
 class Test {
@@ -23,15 +22,15 @@ function test2() {
 }
 try {
     test();
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     test2();
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
-Attempt to assign property "y" on null
-Attempt to assign property "y" on null
+Error: Attempt to assign property "y" on null
+Error: Attempt to assign property "y" on null

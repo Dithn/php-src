@@ -35,7 +35,9 @@ foreach ($gens as $gen) {
 
 ?>
 --EXPECTF--
-object(Generator)#2 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(%d) "class@anonymous%s::a"
 }
 array(2) {
   [0]=>
@@ -57,7 +59,7 @@ array(2) {
     ["class"]=>
     string(%d) "class@anonymous%s"
     ["object"]=>
-    object(class@anonymous)#%d (0) {
+    object(class@anonymous%0%s)#%d (0) {
     }
     ["type"]=>
     string(2) "->"
@@ -68,7 +70,9 @@ array(2) {
 }
 int(%d)
 string(%d) "%sReflectionGenerator_basic.%s"
-object(Generator)#6 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(3) "foo"
 }
 object(ReflectionMethod)#8 (2) {
   ["name"]=>
@@ -76,15 +80,17 @@ object(ReflectionMethod)#8 (2) {
   ["class"]=>
   string(%d) "class@anonymous%s"
 }
-object(class@anonymous)#1 (0) {
+object(class@anonymous%0%s)#1 (0) {
 }
-object(Generator)#4 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(%d) "{closure:%s:%d}"
 }
 array(1) {
   [0]=>
   array(2) {
     ["function"]=>
-    string(9) "{closure}"
+    string(%d) "{closure:%s:%d}"
     ["args"]=>
     array(0) {
     }
@@ -92,14 +98,18 @@ array(1) {
 }
 int(%d)
 string(%d) "%sReflectionGenerator_basic.%s"
-object(Generator)#4 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(%d) "{closure:%s:%d}"
 }
 object(ReflectionFunction)#7 (1) {
   ["name"]=>
-  string(9) "{closure}"
+  string(%d) "{closure:%s:%d}"
 }
 NULL
-object(Generator)#5 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(3) "foo"
 }
 array(1) {
   [0]=>
@@ -113,7 +123,9 @@ array(1) {
 }
 int(%d)
 string(%d) "%sReflectionGenerator_basic.%s"
-object(Generator)#5 (0) {
+object(Generator)#%d (1) {
+  ["function"]=>
+  string(3) "foo"
 }
 object(ReflectionFunction)#8 (1) {
   ["name"]=>

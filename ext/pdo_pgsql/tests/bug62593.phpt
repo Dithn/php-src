@@ -1,7 +1,6 @@
 --TEST--
 PDO PgSQL Bug #62593 (Emulate prepares behave strangely with PARAM_BOOL)
 --EXTENSIONS--
-pdo
 pdo_pgsql
 --SKIPIF--
 <?php
@@ -54,7 +53,7 @@ $expect = 'No errors found';
 
 foreach ($errors as $error)
 {
-  if (strpos('Invalid text representation', $error[2]) !== false)
+  if (null !== $error[2] && strpos('Invalid text representation', $error[2]) !== false)
   {
     $expect = 'Invalid boolean found';
   }

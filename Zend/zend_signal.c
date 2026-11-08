@@ -2,15 +2,13 @@
   +----------------------------------------------------------------------+
   | Zend Signal Handling                                                 |
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Lucas Nealan <lucas@php.net>                                |
   |          Arnaud Le Blanc <lbarnaud@php.net>                          |
@@ -22,8 +20,9 @@
    Facebook Inc. as the original contributor of this module by leaving
    this note intact in the source code.
 
-   All other licensing and usage conditions are those of the PHP Group.
-*/
+   All other licensing and usage conditions are those of the PHP Group and
+   Contributors.
+ */
 
 #ifndef _GNU_SOURCE
 # define _GNU_SOURCE
@@ -62,7 +61,7 @@ ZEND_API zend_signal_globals_t zend_signal_globals;
 #endif
 
 static void zend_signal_handler(int signo, siginfo_t *siginfo, void *context);
-static int zend_signal_register(int signo, void (*handler)(int, siginfo_t*, void*));
+static zend_result zend_signal_register(int signo, void (*handler)(int, siginfo_t*, void*));
 
 #if defined(__CYGWIN__) || defined(__PASE__)
 /* Matches zend_execute_API.c; these platforms don't support ITIMER_PROF. */
@@ -71,7 +70,7 @@ static int zend_signal_register(int signo, void (*handler)(int, siginfo_t*, void
 #define TIMEOUT_SIG SIGPROF
 #endif
 
-static int zend_sigs[] = { TIMEOUT_SIG, SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2 };
+static const int zend_sigs[] = { TIMEOUT_SIG, SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2 };
 
 #define SA_FLAGS_MASK ~(SA_NODEFER | SA_RESETHAND)
 
@@ -81,14 +80,16 @@ static sigset_t            global_sigmask;
 
 /* {{{ zend_signal_handler_defer
  *  Blocks signals if in critical section */
-void zend_signal_handler_defer(int signo, siginfo_t *siginfo, void *context)
+static void zend_signal_handler_defer(int signo, siginfo_t *siginfo, void *context)
 {
 	int errno_save = errno;
 	zend_signal_queue_t *queue, *qtmp;
 
 #ifdef ZTS
-	/* A signal could hit after TSRM shutdown, in this case globals are already freed. */
-	if (tsrm_is_shutdown()) {
+	/* A signal could hit after TSRM shutdown, in this case globals are already freed.
+	 * Or it could be delivered to a thread that didn't execute PHP yet.
+	 * In the latter case we act as if SIGG(active) is false. */
+	if (tsrm_is_shutdown() || !tsrm_is_managed_thread()) {
 		/* Forward to default handler handler */
 		zend_signal_handler(signo, siginfo, context);
 		return;
@@ -180,9 +181,8 @@ static void zend_signal_handler(int signo, siginfo_t *siginfo, void *context)
 	sigset_t sigset;
 	zend_signal_entry_t p_sig;
 #ifdef ZTS
-	if (tsrm_is_shutdown()) {
-		p_sig.flags = 0;
-		p_sig.handler = SIG_DFL;
+	if (tsrm_is_shutdown() || !tsrm_is_managed_thread()) {
+		p_sig = global_orig_handlers[signo-1];
 	} else
 #endif
 	p_sig = SIGG(handlers)[signo-1];
@@ -248,7 +248,7 @@ ZEND_API void zend_sigaction(int signo, const struct sigaction *act, struct siga
 		if (SIGG(handlers)[signo-1].handler == (void *) SIG_IGN) {
 			sa.sa_sigaction = (void *) SIG_IGN;
 		} else {
-			sa.sa_flags     = SA_SIGINFO | (act->sa_flags & SA_FLAGS_MASK);
+			sa.sa_flags     = SA_ONSTACK | SA_SIGINFO | (act->sa_flags & SA_FLAGS_MASK);
 			sa.sa_sigaction = zend_signal_handler_defer;
 			sa.sa_mask      = global_sigmask;
 		}

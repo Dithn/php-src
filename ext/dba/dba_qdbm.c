@@ -1,26 +1,24 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Marcin Gibula <mg@iceni.pl>                                  |
   +----------------------------------------------------------------------+
 */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_QDBM
+#ifdef DBA_QDBM
 #include "php_qdbm.h"
 
 #ifdef QDBM_INCLUDE_FILE
@@ -37,16 +35,16 @@ DBA_OPEN_FUNC(qdbm)
 
 	switch(info->mode) {
 		case DBA_READER:
-			dbf = dpopen(info->path, DP_OREADER, 0);
+			dbf = dpopen(ZSTR_VAL(info->path), DP_OREADER, 0);
 			break;
 		case DBA_WRITER:
-			dbf = dpopen(info->path, DP_OWRITER, 0);
+			dbf = dpopen(ZSTR_VAL(info->path), DP_OWRITER, 0);
 			break;
 		case DBA_CREAT:
-			dbf = dpopen(info->path, DP_OWRITER | DP_OCREAT, 0);
+			dbf = dpopen(ZSTR_VAL(info->path), DP_OWRITER | DP_OCREAT, 0);
 			break;
 		case DBA_TRUNC:
-			dbf = dpopen(info->path, DP_OWRITER | DP_OCREAT | DP_OTRUNC, 0);
+			dbf = dpopen(ZSTR_VAL(info->path), DP_OWRITER | DP_OCREAT | DP_OTRUNC, 0);
 			break;
 		default:
 			return FAILURE;
@@ -175,7 +173,7 @@ DBA_SYNC_FUNC(qdbm)
 
 DBA_INFO_FUNC(qdbm)
 {
-	return estrdup(dpversion);
+	return dpversion;
 }
 
 #endif

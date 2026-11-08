@@ -7,25 +7,35 @@ session.save_handler=files
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --FILE--
 <?php
 
 ob_start();
 
 echo "*** Testing session_module_name() : variation ***\n";
-function open($save_path, $session_name) {
-    throw new Exception("Stop...!");
+
+class MySessionHandler implements SessionHandlerInterface {
+    public function open($save_path, $session_name): bool {
+        throw new Exception("Stop...!");
+    }
+    public function close(): bool { return true; }
+    public function read($id): string|false { return ''; }
+    public function write($id, $session_data): bool { return true; }
+    public function destroy($id): bool { return true; }
+    public function gc($maxlifetime): int { return 1; }
+
+    private int $id = 0;
+	public function create_sid(): string {
+	    return ++$this->id;
+	}
+	public function validateId(string $id): bool {
+	    return $id > 0 && $id <= $this->id;
+	}
 }
 
-function close() { return true; }
-function read($id) { return ''; }
-function write($id, $session_data) { return true; }
-function destroy($id) { return true; }
-function gc($maxlifetime) { return true; }
-
 var_dump(session_module_name("files"));
-session_set_save_handler("open", "close", "read", "write", "destroy", "gc");
+session_set_save_handler(new MySessionHandler());
 var_dump(session_module_name());
 var_dump(session_start());
 var_dump(session_module_name());
@@ -40,7 +50,7 @@ string(4) "user"
 
 Fatal error: Uncaught Exception: Stop...! in %s:%d
 Stack trace:
-#0 [internal function]: open('', 'PHPSESSID')
+#0 [internal function]: MySessionHandler->open('', 'PHPSESSID')
 #1 %s(%d): session_start()
 #2 {main}
   thrown in %s on line %d

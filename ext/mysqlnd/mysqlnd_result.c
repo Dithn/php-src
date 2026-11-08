@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Ulf Wendel <uw@php.net>                                     |
@@ -152,8 +150,6 @@ MYSQLND_METHOD(mysqlnd_res, read_result_metadata)(MYSQLND_RES * result, MYSQLND_
 		result->meta = NULL;
 		DBG_RETURN(FAIL);
 	}
-	/* COM_FIELD_LIST is broken and has premature EOF, thus we need to hack here and in mysqlnd_res_meta.c */
-	result->field_count = result->meta->field_count;
 
 	/*
 	  2. Follows an EOF packet, which the client of mysqlnd_read_result_metadata()
@@ -185,7 +181,7 @@ mysqlnd_query_read_result_set_header(MYSQLND_CONN_DATA * conn, MYSQLND_STMT * s)
 		UPSERT_STATUS_SET_AFFECTED_ROWS_TO_ERROR(conn->upsert_status);
 
 		if (FAIL == (ret = PACKET_READ(conn, &rset_header))) {
-			if (conn->error_info->error_no != CR_SERVER_GONE_ERROR) {
+			if (conn->error_info->error_no != CR_SERVER_GONE_ERROR && conn->error_info->error_no != CR_CLIENT_INTERACTION_TIMEOUT) {
 				php_error_docref(NULL, E_WARNING, "Error reading result set's header");
 			}
 			break;
@@ -286,8 +282,12 @@ mysqlnd_query_read_result_set_header(MYSQLND_CONN_DATA * conn, MYSQLND_STMT * s)
 						  COM_STMT_EXECUTE (even if it is not necessary), so either this or
 						  previous branch always works.
 						*/
+						if (rset_header.field_count != stmt->result->field_count) {
+							stmt->result->m.free_result(stmt->result, TRUE);
+							stmt->result = conn->m->result_init(rset_header.field_count);
+						}
+						result = stmt->result;
 					}
-					result = stmt->result;
 				}
 				if (!result) {
 					SET_OOM_ERROR(conn->error_info);
@@ -298,7 +298,7 @@ mysqlnd_query_read_result_set_header(MYSQLND_CONN_DATA * conn, MYSQLND_STMT * s)
 				if (FAIL == (ret = result->m.read_result_metadata(result, conn))) {
 					/* For PS, we leave them in Prepared state */
 					if (!stmt && conn->current_result) {
-						mnd_efree(conn->current_result);
+						conn->current_result->m.free_result(conn->current_result, TRUE);
 						conn->current_result = NULL;
 					}
 					DBG_ERR("Error occurred while reading metadata");
@@ -328,7 +328,7 @@ mysqlnd_query_read_result_set_header(MYSQLND_CONN_DATA * conn, MYSQLND_STMT * s)
 					/*
 					  If SERVER_MORE_RESULTS_EXISTS is set then this is either MULTI_QUERY or a CALL()
 					  The first packet after sending the query/com_execute has the bit set only
-					  in this cases. Not sure why it's a needed but it marks that the whole stream
+					  in these cases. Not sure why it's a needed but it marks that the whole stream
 					  will include many result sets. What actually matters are the bits set at the end
 					  of every result set (the EOF packet).
 					*/
@@ -342,8 +342,8 @@ mysqlnd_query_read_result_set_header(MYSQLND_CONN_DATA * conn, MYSQLND_STMT * s)
 					}
 					MYSQLND_INC_CONN_STATISTIC(conn->stats, statistic);
 				}
+				PACKET_FREE(&fields_eof);
 			} while (0);
-			PACKET_FREE(&fields_eof);
 			break; /* switch break */
 		}
 	} while (0);
@@ -720,9 +720,6 @@ MYSQLND_METHOD(mysqlnd_res, store_result_fetch_data)(MYSQLND_CONN_DATA * const c
 
 	if (ret == FAIL) {
 		COPY_CLIENT_ERROR(&set->error_info, row_packet.error_info);
-	} else {
-		/* libmysql's documentation says it should be so for SELECT statements */
-		UPSERT_STATUS_SET_AFFECTED_ROWS(conn->upsert_status, set->row_count);
 	}
 	DBG_INF_FMT("ret=%s row_count=%u warnings=%u server_status=%u",
 				ret == PASS? "PASS":"FAIL",
@@ -731,8 +728,8 @@ MYSQLND_METHOD(mysqlnd_res, store_result_fetch_data)(MYSQLND_CONN_DATA * const c
 				UPSERT_STATUS_GET_SERVER_STATUS(conn->upsert_status));
 free_end:
 	PACKET_FREE(&row_packet);
+	DBG_INF_FMT("rows=%llu", (unsigned long long)set->row_count);
 end:
-	DBG_INF_FMT("rows=%llu", (unsigned long long)result->stored_data->row_count);
 	DBG_RETURN(ret);
 }
 /* }}} */
@@ -968,6 +965,13 @@ MYSQLND_METHOD(mysqlnd_res, fetch_into)(MYSQLND_RES * result, const unsigned int
 	bool fetched_anything;
 	zval *row_data;
 
+	// We clean the error here because in unbuffered mode we could receive a new error
+	// and therefore consumers of this method are checking for errors
+	MYSQLND_CONN_DATA *conn = result->conn;
+	if (conn) {
+		SET_EMPTY_ERROR(conn->error_info);
+	}
+
 	DBG_ENTER("mysqlnd_res::fetch_into");
 	if (FAIL == result->m.fetch_row(result, &row_data, flags, &fetched_anything)) {
 		RETVAL_FALSE;
@@ -995,18 +999,11 @@ MYSQLND_METHOD(mysqlnd_res, fetch_into)(MYSQLND_RES * result, const unsigned int
 			}
 		}
 		if (flags & MYSQLND_FETCH_ASSOC) {
-			/* zend_hash_quick_update needs length + trailing zero */
-			/* QQ: Error handling ? */
-			/*
-			  zend_hash_quick_update does not check, as add_assoc_zval_ex do, whether
-			  the index is a numeric and convert it to it. This however means constant
-			  hashing of the column name, which is not needed as it can be precomputed.
-			*/
 			Z_TRY_ADDREF_P(data);
-			if (meta->fields[i].is_numeric == FALSE) {
-				zend_hash_update(row_ht, meta->fields[i].sname, data);
+			if (field->is_numeric == FALSE) {
+				zend_hash_update(row_ht, field->sname, data);
 			} else {
-				zend_hash_index_update(row_ht, meta->fields[i].num_key, data);
+				zend_hash_index_update(row_ht, field->num_key, data);
 			}
 		}
 
@@ -1029,10 +1026,9 @@ MYSQLND_METHOD(mysqlnd_res, fetch_row_c)(MYSQLND_RES * result)
 	mysqlnd_result_free_prev_data(result);
 	if (result->m.fetch_row(result, &row_data, 0, &fetched_anything) == PASS && fetched_anything) {
 		unsigned field_count = result->field_count;
-		MYSQLND_FIELD *field = result->meta->fields;
 
 		ret = mnd_emalloc(field_count * sizeof(char *));
-		for (unsigned i = 0; i < field_count; i++, field++) {
+		for (unsigned i = 0; i < field_count; i++) {
 			zval *data = &row_data[i];
 			if (Z_TYPE_P(data) != IS_NULL) {
 				convert_to_string(data);

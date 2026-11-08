@@ -1,16 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
 */
 
@@ -26,6 +22,16 @@
 #define MULTIPART_EVENT_FILE_DATA	3
 #define MULTIPART_EVENT_FILE_END	4
 #define MULTIPART_EVENT_END		5
+
+/* Errors */
+#define PHP_UPLOAD_ERROR_OK   0  /* File upload successful */
+#define PHP_UPLOAD_ERROR_A    1  /* Uploaded file exceeded upload_max_filesize */
+#define PHP_UPLOAD_ERROR_B    2  /* Uploaded file exceeded MAX_FILE_SIZE */
+#define PHP_UPLOAD_ERROR_C    3  /* Partially uploaded */
+#define PHP_UPLOAD_ERROR_D    4  /* No file uploaded */
+#define PHP_UPLOAD_ERROR_E    6  /* Missing /tmp or similar directory */
+#define PHP_UPLOAD_ERROR_F    7  /* Failed to write file to disk */
+#define PHP_UPLOAD_ERROR_X    8  /* File upload stopped by extension */
 
 typedef struct _multipart_event_start {
 	size_t	content_length;
@@ -73,8 +79,7 @@ typedef char* (*php_rfc1867_basename_t)(const zend_encoding *encoding, char *str
 SAPI_API SAPI_POST_HANDLER_FUNC(rfc1867_post_handler);
 
 PHPAPI void destroy_uploaded_files_hash(void);
-void php_rfc1867_register_constants(void);
-extern PHPAPI int (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra);
+extern PHPAPI zend_result (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra);
 
 SAPI_API void php_rfc1867_set_multibyte_callbacks(
 					php_rfc1867_encoding_translation_t encoding_translation,

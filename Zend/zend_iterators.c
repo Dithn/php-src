@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Wez Furlong <wez@thebrainroom.com>                           |
    |         Marcus Boerger <helly@php.net>                               |
@@ -31,6 +30,7 @@ static const zend_object_handlers iterator_object_handlers = {
 	iter_wrapper_free,
 	iter_wrapper_dtor,
 	NULL, /* clone_obj */
+	NULL, /* clone_obj_with */
 	NULL, /* prop read */
 	NULL, /* prop write */
 	NULL, /* read dim */
@@ -57,6 +57,7 @@ static const zend_object_handlers iterator_object_handlers = {
 ZEND_API void zend_register_iterator_wrapper(void)
 {
 	INIT_CLASS_ENTRY(zend_iterator_class_entry, "__iterator_wrapper", NULL);
+	zend_iterator_class_entry.default_object_handlers = &iterator_object_handlers;
 }
 
 static void iter_wrapper_free(zend_object *object)
@@ -83,7 +84,6 @@ static HashTable *iter_wrapper_get_gc(zend_object *object, zval **table, int *n)
 ZEND_API void zend_iterator_init(zend_object_iterator *iter)
 {
 	zend_object_std_init(&iter->std, &zend_iterator_class_entry);
-	iter->std.handlers = &iterator_object_handlers;
 }
 
 ZEND_API void zend_iterator_dtor(zend_object_iterator *iter)

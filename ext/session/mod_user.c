@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Sascha Schumann <sascha@schumann.cx>                         |
    +----------------------------------------------------------------------+
@@ -18,98 +16,89 @@
 #include "php_session.h"
 #include "mod_user.h"
 
+#include "zend_exceptions.h"
+
 const ps_module ps_mod_user = {
 	PS_MOD_UPDATE_TIMESTAMP(user)
 };
 
-
-static void ps_call_handler(zval *func, int argc, zval *argv, zval *retval)
+static void ps_call_handler(zval *func, uint32_t argc, zval *argv, zval *retval)
 {
-	int i;
 	if (PS(in_save_handler)) {
-		PS(in_save_handler) = 0;
+		PS(in_save_handler) = false;
 		ZVAL_UNDEF(retval);
 		php_error_docref(NULL, E_WARNING, "Cannot call session save handler in a recursive manner");
-		return;
+	} else {
+		PS(in_save_handler) = true;
+		if (call_user_function(NULL, NULL, func, retval, argc, argv) == FAILURE) {
+			zval_ptr_dtor(retval);
+			ZVAL_UNDEF(retval);
+		}
+		PS(in_save_handler) = false;
 	}
-	PS(in_save_handler) = 1;
-	if (call_user_function(NULL, NULL, func, retval, argc, argv) == FAILURE) {
-		zval_ptr_dtor(retval);
-		ZVAL_UNDEF(retval);
-	} else if (Z_ISUNDEF_P(retval)) {
-		ZVAL_NULL(retval);
-	}
-	PS(in_save_handler) = 0;
-	for (i = 0; i < argc; i++) {
+	for (uint32_t i = 0; i < argc; i++) {
 		zval_ptr_dtor(&argv[i]);
 	}
 }
 
-#define STDVARS								\
-	zval retval;							\
-	int ret = FAILURE
+#define PSF(a) PS(mod_user_names).ps_##a
 
-#define PSF(a) PS(mod_user_names).name.ps_##a
-
-#define FINISH \
-	if (Z_TYPE(retval) != IS_UNDEF) { \
-		if (Z_TYPE(retval) == IS_TRUE) { \
-			ret = SUCCESS; \
-		} else if (Z_TYPE(retval) == IS_FALSE) { \
-			ret = FAILURE; \
-		}  else if ((Z_TYPE(retval) == IS_LONG) && (Z_LVAL(retval) == -1)) { \
-			if (!EG(exception)) { \
-				php_error_docref(NULL, E_DEPRECATED, "Session callback must have a return value of type bool, %s returned", zend_zval_type_name(&retval)); \
-			} \
-			ret = FAILURE; \
-		} else if ((Z_TYPE(retval) == IS_LONG) && (Z_LVAL(retval) == 0)) { \
-			if (!EG(exception)) { \
-				php_error_docref(NULL, E_DEPRECATED, "Session callback must have a return value of type bool, %s returned", zend_zval_type_name(&retval)); \
-			} \
-			ret = SUCCESS; \
-		} else { \
-			if (!EG(exception)) { \
-				zend_type_error("Session callback must have a return value of type bool, %s returned", zend_zval_type_name(&retval)); \
-			} \
-			ret = FAILURE; \
-			zval_ptr_dtor(&retval); \
-		} \
-	} \
-	return ret
+static zend_result verify_bool_return_type_userland_calls(const zval *value)
+{
+	switch (Z_TYPE_P(value)) {
+		case IS_TRUE:
+			return SUCCESS;
+		case IS_FALSE:
+		/* Exit or exception in userland call */
+		case IS_UNDEF:
+			return FAILURE;
+		case IS_LONG:
+			/* Deprecated cases */
+			if (Z_LVAL_P(value) == 0) {
+				php_error_docref(NULL, E_DEPRECATED, "Session callback must have a return value of type bool, %s returned", zend_zval_value_name(value));
+				return SUCCESS;
+			} else if (Z_LVAL_P(value) == -1) {
+				php_error_docref(NULL, E_DEPRECATED, "Session callback must have a return value of type bool, %s returned", zend_zval_value_name(value));
+				return FAILURE;
+			}
+			ZEND_FALLTHROUGH;
+		default:
+			zend_type_error("Session callback must have a return value of type bool, %s returned", zend_zval_value_name(value));
+			return FAILURE;
+	}
+}
 
 PS_OPEN_FUNC(user)
 {
 	zval args[2];
-	STDVARS;
+	zval retval;
 
-	if (Z_ISUNDEF(PSF(open))) {
-		php_error_docref(NULL, E_WARNING, "User session functions are not defined");
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(open)));
 
-		return FAILURE;
-	}
-
-	ZVAL_STRING(&args[0], (char*)save_path);
-	ZVAL_STRING(&args[1], (char*)session_name);
+	ZVAL_STR(&args[0], zend_string_dup(save_path, false));
+	ZVAL_STR(&args[1], zend_string_dup(session_name, false));
 
 	zend_try {
 		ps_call_handler(&PSF(open), 2, args, &retval);
 	} zend_catch {
 		PS(session_status) = php_session_none;
-		if (!Z_ISUNDEF(retval)) {
-			zval_ptr_dtor(&retval);
-		}
+		zval_ptr_dtor(&retval);
 		zend_bailout();
 	} zend_end_try();
 
-	PS(mod_user_implemented) = 1;
+	PS(mod_user_implemented) = true;
 
-	FINISH;
+	zend_result ret = verify_bool_return_type_userland_calls(&retval);
+	zval_ptr_dtor(&retval);
+	return ret;
 }
 
 PS_CLOSE_FUNC(user)
 {
-	bool bailout = 0;
-	STDVARS;
+	zval retval;
+	zend_result ret = FAILURE;
+
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(close)));
 
 	if (!PS(mod_user_implemented)) {
 		/* already closed */
@@ -119,25 +108,25 @@ PS_CLOSE_FUNC(user)
 	zend_try {
 		ps_call_handler(&PSF(close), 0, NULL, &retval);
 	} zend_catch {
-		bailout = 1;
+		PS(mod_user_implemented) = false;
+		zval_ptr_dtor(&retval);
+		zend_bailout();
 	} zend_end_try();
 
-	PS(mod_user_implemented) = 0;
+	PS(mod_user_implemented) = false;
 
-	if (bailout) {
-		if (!Z_ISUNDEF(retval)) {
-			zval_ptr_dtor(&retval);
-		}
-		zend_bailout();
-	}
-
-	FINISH;
+	ret = verify_bool_return_type_userland_calls(&retval);
+	zval_ptr_dtor(&retval);
+	return ret;
 }
 
 PS_READ_FUNC(user)
 {
 	zval args[1];
-	STDVARS;
+	zval retval;
+	zend_result ret = FAILURE;
+
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(read)));
 
 	ZVAL_STR_COPY(&args[0], key);
 
@@ -157,32 +146,44 @@ PS_READ_FUNC(user)
 PS_WRITE_FUNC(user)
 {
 	zval args[2];
-	STDVARS;
+	zval retval;
+	zend_result ret = FAILURE;
+
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(write)));
 
 	ZVAL_STR_COPY(&args[0], key);
 	ZVAL_STR_COPY(&args[1], val);
 
 	ps_call_handler(&PSF(write), 2, args, &retval);
 
-	FINISH;
+	ret = verify_bool_return_type_userland_calls(&retval);
+	zval_ptr_dtor(&retval);
+	return ret;
 }
 
 PS_DESTROY_FUNC(user)
 {
 	zval args[1];
-	STDVARS;
+	zval retval;
+	zend_result ret = FAILURE;
+
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(destroy)));
 
 	ZVAL_STR_COPY(&args[0], key);
 
 	ps_call_handler(&PSF(destroy), 1, args, &retval);
 
-	FINISH;
+	ret = verify_bool_return_type_userland_calls(&retval);
+	zval_ptr_dtor(&retval);
+	return ret;
 }
 
 PS_GC_FUNC(user)
 {
 	zval args[1];
 	zval retval;
+
+	ZEND_ASSERT(!Z_ISUNDEF(PSF(gc)));
 
 	ZVAL_LONG(&args[0], maxlifetime);
 
@@ -197,6 +198,7 @@ PS_GC_FUNC(user)
 		/* Anything else is some kind of error */
 		*nrdels = -1; // Error
 	}
+	zval_ptr_dtor(&retval);
 	return *nrdels;
 }
 
@@ -204,27 +206,25 @@ PS_CREATE_SID_FUNC(user)
 {
 	/* maintain backwards compatibility */
 	if (!Z_ISUNDEF(PSF(create_sid))) {
-		zend_string *id = NULL;
 		zval retval;
 
 		ps_call_handler(&PSF(create_sid), 0, NULL, &retval);
+		/* Exception was thrown */
+		if (Z_ISUNDEF(retval)) {
+			return NULL;
+		}
 
-		if (!Z_ISUNDEF(retval)) {
-			if (Z_TYPE(retval) == IS_STRING) {
-				id = zend_string_copy(Z_STR(retval));
+		if (UNEXPECTED(Z_TYPE(retval) != IS_STRING)) {
+			/* Will no longer be needed in PHP 9 as the interface return type will be in effect */
+			if (!EG(exception)) {
+				zend_throw_error(zend_ce_type_error, "Session id must be of type string, %s given", zend_zval_type_name(&retval));
 			}
 			zval_ptr_dtor(&retval);
-		} else {
-			zend_throw_error(NULL, "No session id returned by function");
 			return NULL;
 		}
+		ZEND_ASSERT(Z_TYPE(retval) == IS_STRING);
 
-		if (!id) {
-			zend_throw_error(NULL, "Session id must be a string");
-			return NULL;
-		}
-
-		return id;
+		return Z_STR(retval);
 	}
 
 	/* function as defined by PS_MOD */
@@ -236,13 +236,16 @@ PS_VALIDATE_SID_FUNC(user)
 	/* maintain backwards compatibility */
 	if (!Z_ISUNDEF(PSF(validate_sid))) {
 		zval args[1];
-		STDVARS;
+		zval retval;
+		zend_result ret = FAILURE;
 
 		ZVAL_STR_COPY(&args[0], key);
 
 		ps_call_handler(&PSF(validate_sid), 1, args, &retval);
 
-		FINISH;
+		ret = verify_bool_return_type_userland_calls(&retval);
+		zval_ptr_dtor(&retval);
+		return ret;
 	}
 
 	/* dummy function defined by PS_MOD */
@@ -252,7 +255,8 @@ PS_VALIDATE_SID_FUNC(user)
 PS_UPDATE_TIMESTAMP_FUNC(user)
 {
 	zval args[2];
-	STDVARS;
+	zval retval;
+	zend_result ret = FAILURE;
 
 	ZVAL_STR_COPY(&args[0], key);
 	ZVAL_STR_COPY(&args[1], val);
@@ -264,5 +268,7 @@ PS_UPDATE_TIMESTAMP_FUNC(user)
 		ps_call_handler(&PSF(write), 2, args, &retval);
 	}
 
-	FINISH;
+	ret = verify_bool_return_type_userland_calls(&retval);
+	zval_ptr_dtor(&retval);
+	return ret;
 }

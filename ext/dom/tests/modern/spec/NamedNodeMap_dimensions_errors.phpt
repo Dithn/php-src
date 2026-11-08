@@ -1,0 +1,19 @@
+--TEST--
+NamedNodeMap dimensions errors
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+
+$dom = Dom\XMLDocument::createFromString('<root a="1" b="2" c="3"></root>');
+$attributes = $dom->documentElement->attributes;
+
+try {
+    $attributes[][0] = 1;
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+?>
+--EXPECT--
+Error: Cannot append to Dom\NamedNodeMap

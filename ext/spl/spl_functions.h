@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Marcus Boerger <helly@php.net>                              |
    +----------------------------------------------------------------------+
@@ -19,22 +17,6 @@
 
 #include "php.h"
 
-typedef zend_object* (*create_object_func_t)(zend_class_entry *class_type);
-
-#define REGISTER_SPL_CLASS_CONST_LONG(class_name, const_name, value) \
-	zend_declare_class_constant_long(spl_ce_ ## class_name, const_name, sizeof(const_name)-1, (zend_long)value);
-
-/* sub: whether to allow subclasses/interfaces
-   allow = 0: allow all classes and interfaces
-   allow > 0: allow all that match and mask ce_flags
-   allow < 0: disallow all that match and mask ce_flags
- */
-void spl_add_class_name(zval * list, zend_class_entry * pce, int allow, int ce_flags);
-void spl_add_interfaces(zval * list, zend_class_entry * pce, int allow, int ce_flags);
-void spl_add_traits(zval * list, zend_class_entry * pce, int allow, int ce_flags);
-int spl_add_classes(zend_class_entry *pce, zval *list, int sub, int allow, int ce_flags);
-
-/* caller must efree(return) */
-zend_string *spl_gen_private_prop_name(zend_class_entry *ce, char *prop_name, int prop_len);
+void spl_set_private_debug_info_property(const zend_class_entry *ce, const char *property, size_t property_len, HashTable *debug_info, zval *value);
 
 #endif /* PHP_FUNCTIONS_H */

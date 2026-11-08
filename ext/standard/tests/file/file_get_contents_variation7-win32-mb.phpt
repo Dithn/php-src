@@ -54,12 +54,21 @@ for($i = 0; $i<count($allDirs); $i++) {
   var_dump(file_get_contents($dir."\\".$filename));
 }
 
-unlink($absFile);
 chdir($old_dir_path);
-rmdir($absSubDir);
-rmdir($absMainDir);
 
 echo "\n*** Done ***\n";
+?>
+--CLEAN--
+<?php
+$mainDir = "fileGetContentsVar7私はガラスを食べられます.dir";
+$subDir = "fileGetContentsVar7Sub私はガラスを食べられます";
+$absMainDir = __DIR__."/".$mainDir;
+$absSubDir = $absMainDir."/".$subDir;
+$filename = 'FileGetContentsVar7.tmp';
+$absFile = $absSubDir.'/'.$filename;
+unlink($absFile);
+rmdir($absSubDir);
+rmdir($absMainDir);
 ?>
 --EXPECTF--
 *** Testing file_get_contents() : variation ***
@@ -78,12 +87,12 @@ string(%d) "contents read"
 
 -- Iteration 5 --
 
-Warning: file_get_contents(%sfileGetContentsVar7私はガラスを食べられます.dir\fileGetContentsVar7Sub私はガラスを食べられます\..\\\fileGetContentsVar7Sub私はガラスを食べられます\\..\\..\fileGetContentsVar7Sub私はガラスを食べられます\FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 -- Iteration 6 --
 
-Warning: file_get_contents(%sfileGetContentsVar7私はガラスを食べられます.dir\fileGetContentsVar7Sub私はガラスを食べられます\BADDIR\FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 -- Iteration 7 --
@@ -100,7 +109,7 @@ string(%d) "contents read"
 
 -- Iteration 11 --
 
-Warning: file_get_contents(BADDIR\FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 -- Iteration 12 --

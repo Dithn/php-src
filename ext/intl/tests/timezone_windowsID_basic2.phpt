@@ -3,7 +3,7 @@ IntlTimeZone::getWindowsID basic test
 --EXTENSIONS--
 intl
 --SKIPIF--
-<?php if (version_compare(INTL_ICU_VERSION, '58.1') < 0) die('skip for ICU >= 58.1'); ?>
+<?php if (version_compare(INTL_ICU_VERSION, '58.1') < 0) die('skip requires ICU >= 58.1'); ?>
 --FILE--
 <?php
 
@@ -33,7 +33,7 @@ string(18) "Cuba Standard Time"
 string(21) "Central Standard Time"
 string(21) "Pacific Standard Time"
 bool(false)
-Error: intltz_get_windows_id: Unknown system timezone: U_ILLEGAL_ARGUMENT_ERROR
+Error: IntlTimeZone::getWindowsID(): unknown system timezone: U_ILLEGAL_ARGUMENT_ERROR
 string(21) "Morocco Standard Time"
 string(23) "Singapore Standard Time"
 string(26) "W. Australia Standard Time"

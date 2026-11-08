@@ -11,10 +11,20 @@ if (!function_exists("dcngettext")) die("skip dcngettext() doesn't exist");
 
 var_dump(dcngettext(1,1,1,1,1));
 var_dump(dcngettext("test","test","test",1,1));
-var_dump(dcngettext("test","test","test",0,0));
+var_dump(dcngettext("test","test","test",0,1));
 var_dump(dcngettext("test","test","test",-1,-1));
-var_dump(dcngettext("","","",1,1));
-var_dump(dcngettext("","","",0,0));
+
+try {
+    dcngettext("","","",1,1);
+} catch (\Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    dcngettext("","","",0,1);
+} catch (\Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
 
 echo "Done\n";
 ?>
@@ -23,6 +33,6 @@ string(1) "1"
 string(4) "test"
 string(4) "test"
 string(4) "test"
-string(0) ""
-string(0) ""
+ValueError: dcngettext(): Argument #1 ($domain) must not be empty
+ValueError: dcngettext(): Argument #1 ($domain) must not be empty
 Done

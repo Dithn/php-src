@@ -1,26 +1,24 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author:  Michael Maclean <mgdm@php.net>                              |
    +----------------------------------------------------------------------+
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_TCADB
+#ifdef DBA_TCADB
 #include "php_tcadb.h"
 
 #ifdef TCADB_INCLUDE_FILE
@@ -39,16 +37,16 @@ DBA_OPEN_FUNC(tcadb)
 	if (tcadb) {
 		switch(info->mode) {
 			case DBA_READER:
-				spprintf(&path_string, 0, "%s#mode=r", info->path);
+				spprintf(&path_string, 0, "%s#mode=r", ZSTR_VAL(info->path));
 				break;
 			case DBA_WRITER:
-				spprintf(&path_string, 0, "%s#mode=w", info->path);
+				spprintf(&path_string, 0, "%s#mode=w", ZSTR_VAL(info->path));
 				break;
 			case DBA_CREAT:
-				spprintf(&path_string, 0, "%s#mode=wc", info->path);
+				spprintf(&path_string, 0, "%s#mode=wc", ZSTR_VAL(info->path));
 				break;
 			case DBA_TRUNC:
-				spprintf(&path_string, 0, "%s#mode=wct", info->path);
+				spprintf(&path_string, 0, "%s#mode=wct", ZSTR_VAL(info->path));
 				break;
 			default:
 				tcadbdel(tcadb);
@@ -195,7 +193,7 @@ DBA_SYNC_FUNC(tcadb)
 
 DBA_INFO_FUNC(tcadb)
 {
-	return estrdup(tcversion);
+	return tcversion;
 }
 
 #endif

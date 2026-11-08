@@ -1,8 +1,22 @@
+/*
+   +----------------------------------------------------------------------+
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
+   +----------------------------------------------------------------------+
+ */
+
+/* interface header; needs to be installed; FIXME rename? */
+
 #ifndef incl_PHP_GMP_INT_H
 #define incl_PHP_GMP_INT_H
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
@@ -21,14 +35,12 @@ typedef struct _gmp_object {
 	zend_object std;
 } gmp_object;
 
-static inline gmp_object *php_gmp_object_from_zend_object(zend_object *zobj) {
-	return (gmp_object *)( ((char *)zobj) - XtOffsetOf(gmp_object, std) );
-}
+#define php_gmp_object_from_zend_object(zobj) ZEND_CONTAINER_OF(zobj, gmp_object, std)
 
 PHP_GMP_API zend_class_entry *php_gmp_class_entry(void);
 
 /* GMP and MPIR use different datatypes on different platforms */
-#ifdef PHP_WIN32
+#ifdef _WIN64
 typedef zend_long gmp_long;
 typedef zend_ulong gmp_ulong;
 #else

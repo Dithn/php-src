@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Edin Kadribasic <edink@php.net>                              |
    +----------------------------------------------------------------------+
@@ -23,17 +21,12 @@
 #include <fcntl.h>
 #endif
 
-const char HARDCODED_INI[] =
+static const char HARDCODED_INI[] =
 	"html_errors=0\n"
-	"register_argc_argv=1\n"
 	"implicit_flush=1\n"
 	"output_buffering=0\n"
 	"max_execution_time=0\n"
 	"max_input_time=-1\n\0";
-
-#if defined(PHP_WIN32) && defined(ZTS)
-ZEND_TSRMLS_CACHE_DEFINE()
-#endif
 
 static char* php_embed_read_cookies(void)
 {
@@ -119,10 +112,7 @@ static void php_embed_register_variables(zval *track_vars_array)
 /* Module initialization (MINIT) */
 static int php_embed_startup(sapi_module_struct *sapi_module)
 {
-	if (php_module_startup(sapi_module, NULL, 0) == FAILURE) {
-		return FAILURE;
-	}
-	return SUCCESS;
+	return php_module_startup(sapi_module, NULL);
 }
 
 EMBED_SAPI_API sapi_module_struct php_embed_module = {
@@ -152,7 +142,6 @@ EMBED_SAPI_API sapi_module_struct php_embed_module = {
 	php_embed_register_variables,  /* register server variables */
 	php_embed_log_message,         /* Log message */
 	NULL,                          /* Get request time */
-	NULL,                          /* Child terminate */
 
 	STANDARD_SAPI_MODULE_PROPERTIES
 };
@@ -197,9 +186,9 @@ EMBED_SAPI_API int php_embed_init(int argc, char **argv)
 
 #ifdef PHP_WIN32
 	_fmode = _O_BINARY;			/*sets default for file streams to binary */
-	setmode(_fileno(stdin), O_BINARY);		/* make the stdio mode be binary */
-	setmode(_fileno(stdout), O_BINARY);		/* make the stdio mode be binary */
-	setmode(_fileno(stderr), O_BINARY);		/* make the stdio mode be binary */
+	_setmode(_fileno(stdin), O_BINARY);		/* make the stdio mode be binary */
+	_setmode(_fileno(stdout), O_BINARY);		/* make the stdio mode be binary */
+	_setmode(_fileno(stderr), O_BINARY);		/* make the stdio mode be binary */
 #endif
 
 	/* This hard-coded string of INI settings is parsed and read into PHP's
@@ -217,8 +206,7 @@ EMBED_SAPI_API int php_embed_init(int argc, char **argv)
 	 * allocated so any INI settings added via this callback will have the
 	 * lowest precedence and will allow INI files to overwrite them.
 	 */
-	php_embed_module.ini_entries = malloc(sizeof(HARDCODED_INI));
-	memcpy(php_embed_module.ini_entries, HARDCODED_INI, sizeof(HARDCODED_INI));
+	php_embed_module.ini_entries = HARDCODED_INI;
 
 	/* SAPI-provided functions. */
 	php_embed_module.additional_functions = additional_functions;
@@ -267,9 +255,4 @@ EMBED_SAPI_API void php_embed_shutdown(void)
 #ifdef ZTS
 	tsrm_shutdown();
 #endif
-
-	if (php_embed_module.ini_entries) {
-		free(php_embed_module.ini_entries);
-		php_embed_module.ini_entries = NULL;
-	}
 }

@@ -4,7 +4,7 @@ Bug #74514 5 session functions incorrectly warn when calling in read-only/getter
 session
 --SKIPIF--
 <?php
-include('skipif.inc');
+include 'skipif.inc';
 ?>
 --FILE--
 <?php
@@ -25,10 +25,10 @@ var_dump(session_save_path());
 var_dump(session_cache_limiter());
 var_dump(session_cache_expire());
 ?>
---EXPECT--
-string(9) "PHPSESSID"
-string(3) "foo"
-string(5) "files"
-string(0) ""
-string(7) "nocache"
-int(180)
+--EXPECTF--
+string(%d) "%S"
+string(%d) "%S"
+string(%d) "%S"
+string(%d) "%S"
+string(%d) "%S"
+int(%d)

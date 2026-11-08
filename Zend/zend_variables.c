@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Andi Gutmans <andi@php.net>                                 |
    |          Zeev Suraski <zeev@php.net>                                 |
@@ -37,18 +36,18 @@ static void ZEND_FASTCALL zend_empty_destroy(zend_reference *ref);
 typedef void (ZEND_FASTCALL *zend_rc_dtor_func_t)(zend_refcounted *p);
 
 static const zend_rc_dtor_func_t zend_rc_dtor_func[] = {
-	/* IS_UNDEF        */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_NULL         */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_FALSE        */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_TRUE         */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_LONG         */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_DOUBLE       */ (zend_rc_dtor_func_t)zend_empty_destroy,
-	/* IS_STRING       */ (zend_rc_dtor_func_t)zend_string_destroy,
-	/* IS_ARRAY        */ (zend_rc_dtor_func_t)zend_array_destroy,
-	/* IS_OBJECT       */ (zend_rc_dtor_func_t)zend_objects_store_del,
-	/* IS_RESOURCE     */ (zend_rc_dtor_func_t)zend_list_free,
-	/* IS_REFERENCE    */ (zend_rc_dtor_func_t)zend_reference_destroy,
-	/* IS_CONSTANT_AST */ (zend_rc_dtor_func_t)zend_ast_ref_destroy
+	[IS_UNDEF] =        (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_NULL] =         (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_FALSE] =        (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_TRUE] =         (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_LONG] =         (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_DOUBLE] =       (zend_rc_dtor_func_t)zend_empty_destroy,
+	[IS_STRING] =       (zend_rc_dtor_func_t)zend_string_destroy,
+	[IS_ARRAY] =        (zend_rc_dtor_func_t)zend_array_destroy,
+	[IS_OBJECT] =       (zend_rc_dtor_func_t)zend_objects_store_del,
+	[IS_RESOURCE] =     (zend_rc_dtor_func_t)zend_list_free,
+	[IS_REFERENCE] =    (zend_rc_dtor_func_t)zend_reference_destroy,
+	[IS_CONSTANT_AST] = (zend_rc_dtor_func_t)zend_ast_ref_destroy
 };
 
 ZEND_API void ZEND_FASTCALL rc_dtor_func(zend_refcounted *p)
@@ -85,22 +84,33 @@ ZEND_API void zval_ptr_dtor(zval *zval_ptr) /* {{{ */
 }
 /* }}} */
 
-ZEND_API void zval_internal_ptr_dtor(zval *zval_ptr) /* {{{ */
+ZEND_API void zval_ptr_safe_dtor(zval *zval_ptr)
 {
 	if (Z_REFCOUNTED_P(zval_ptr)) {
 		zend_refcounted *ref = Z_COUNTED_P(zval_ptr);
 
 		if (GC_DELREF(ref) == 0) {
-			if (Z_TYPE_P(zval_ptr) == IS_STRING) {
-				zend_string *str = (zend_string*)ref;
+			ZVAL_NULL(zval_ptr);
+			rc_dtor_func(ref);
+		} else {
+			gc_check_possible_root(ref);
+		}
+	}
+}
 
-				CHECK_ZVAL_STRING(str);
-				ZEND_ASSERT(!ZSTR_IS_INTERNED(str));
-				ZEND_ASSERT((GC_FLAGS(str) & IS_STR_PERSISTENT));
-				free(str);
-			} else {
-				zend_error_noreturn(E_CORE_ERROR, "Internal zval's can't be arrays, objects, resources or reference");
-			}
+ZEND_API void zval_internal_ptr_dtor(zval *zval_ptr) /* {{{ */
+{
+	if (Z_REFCOUNTED_P(zval_ptr)) {
+		ZEND_ASSERT(Z_TYPE_P(zval_ptr) == IS_STRING && "Internal zval's can't be arrays, objects, resources or reference");
+		zend_refcounted *ref = Z_COUNTED_P(zval_ptr);
+
+		if (GC_DELREF(ref) == 0) {
+			zend_string *str = (zend_string*)ref;
+
+			CHECK_ZVAL_STRING(str);
+			ZEND_ASSERT(!ZSTR_IS_INTERNED(str));
+			ZEND_ASSERT((GC_FLAGS(str) & IS_STR_PERSISTENT));
+			free(str);
 		}
 	}
 }

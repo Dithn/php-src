@@ -1,0 +1,19 @@
+--TEST--
+NodeList dimensions errors
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+
+$dom = Dom\XMLDocument::createFromString('<root><a/><b/><c/></root>');
+$children = $dom->documentElement->childNodes;
+
+try {
+    $children[][0] = 1;
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+?>
+--EXPECT--
+Error: Cannot append to Dom\NodeList

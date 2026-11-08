@@ -86,6 +86,7 @@ function xmlwriter_output_memory(XMLWriter $writer, bool $flush = true): string 
 
 function xmlwriter_flush(XMLWriter $writer, bool $empty = true): string|int {}
 
+/** @not-serializable */
 class XMLWriter
 {
     /**
@@ -95,12 +96,19 @@ class XMLWriter
      */
     public function openUri(string $uri): bool {}
 
+    public static function toUri(string $uri): static {}
+
     /**
      * @tentative-return-type
      * @alias xmlwriter_open_memory
      * @no-verify Behaviour differs from the aliased function
      */
     public function openMemory(): bool {}
+
+    public static function toMemory(): static {}
+
+    /** @param resource $stream */
+    public static function toStream($stream): static {}
 
     /**
      * @tentative-return-type

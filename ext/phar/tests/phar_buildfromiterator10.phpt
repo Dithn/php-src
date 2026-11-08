@@ -2,6 +2,8 @@
 Phar::buildFromIterator() RegexIterator(RecursiveIteratorIterator), SplFileInfo as current
 --EXTENSIONS--
 phar
+--CONFLICTS--
+all
 --INI--
 phar.require_hash=0
 phar.readonly=0
@@ -16,8 +18,7 @@ try {
     asort($a);
     var_dump($a);
 } catch (Exception $e) {
-    var_dump(get_class($e));
-    echo $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --CLEAN--

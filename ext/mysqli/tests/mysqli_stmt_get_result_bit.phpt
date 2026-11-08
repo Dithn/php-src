@@ -4,20 +4,19 @@ Fetching BIT column values using the PS API
 mysqli
 --SKIPIF--
 <?php
-    require_once('skipifconnectfailure.inc');
+require_once 'connect.inc';
+if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+}
 
-    if (!function_exists('mysqli_stmt_get_result'))
-        die("skip mysqli_stmt_get_result() not available");
-
-    require_once('connect.inc');
-    require_once('table.inc');
-    if (mysqli_get_server_version($link) < 50003)
-        // b'001' syntax not supported before 5.0.3
-        die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+if (mysqli_get_server_version($link) < 50003) {
+    // b'001' syntax not supported before 5.0.3
+    die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+}
 ?>
 --FILE--
 <?php
-    require('connect.inc');
+    require_once 'connect.inc';
 
     function dec32bin($dec, $bits) {
 
@@ -48,9 +47,6 @@ mysqli
             !mysqli_query($link, $sql = sprintf('CREATE TABLE test(id BIGINT UNSIGNED, bit_value BIT(%d) NOT NULL, bit_null BIT(%d) DEFAULT NULL) ENGINE="%s"', $bits, $bits, $engine)))
             printf("[002 - %d] [%d] %s\n",$bits, mysqli_errno($link), mysqli_error($link));
 
-        if (!$stmt = mysqli_stmt_init($link))
-            printf("[003 - %d] [%d] %s\n", $bits, mysqli_errno($link), mysqli_error($link));
-
         $tests = 0;
         $rand_max = mt_getrandmax();
         while ($tests < 10) {
@@ -78,13 +74,17 @@ mysqli
                 ;
             $bin2 = substr($bin, $i, strlen($bin));
 
-            if (!mysqli_stmt_prepare($stmt, $sql) ||
-                    !mysqli_stmt_execute($stmt))
+            if (!$stmt = mysqli_prepare($link, $sql))
+                printf("[003 - %d] [%d] %s\n", $bits, mysqli_errno($link), mysqli_error($link));
+
+            if(!mysqli_stmt_execute($stmt))
                 printf("[004 - %d] [%d] %s\n", $bits, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
             $sql = sprintf("SELECT bin(bit_value) AS _bin, id, bit_value, bit_null FROM test WHERE id = %s", $value);
-            if (!mysqli_stmt_prepare($stmt, $sql) ||
-                    !mysqli_stmt_execute($stmt))
+            if (!$stmt = mysqli_prepare($link, $sql))
+                printf("[005 - %d] [%d] %s\n", $bits, mysqli_errno($link), mysqli_error($link));
+
+            if(!mysqli_stmt_execute($stmt))
                 printf("[005 - %d] [%d] %s\n", $bits, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
             if (!$res = mysqli_stmt_get_result($stmt))
@@ -124,7 +124,7 @@ mysqli
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+require_once 'clean_table.inc';
 ?>
 --EXPECT--
 done!

@@ -3,7 +3,7 @@ Bug #31454 (Incorrect adding PHPSESSID to links, which contains \r\n)
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --INI--
 session.use_trans_sid=1
 session.use_cookies=0
@@ -30,6 +30,9 @@ session_start();
   </body>
 </html>
 --EXPECTF--
+Deprecated: PHP Startup: Disabling session.use_only_cookies INI setting is deprecated in Unknown on line 0
+
+Deprecated: PHP Startup: Enabling session.use_trans_sid INI setting is deprecated in Unknown on line 0
 <html>
   <head>
     <title>Bug #36459 Incorrect adding PHPSESSID to links, which contains \r\n</title>

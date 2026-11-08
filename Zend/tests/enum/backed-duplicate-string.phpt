@@ -10,6 +10,33 @@ enum Suit: string {
     case Spades = 'H';
 }
 
+try {
+    var_dump(Suit::Hearts);
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    var_dump(Suit::Hearts);
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    var_dump(Suit::from(42));
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    var_dump(Suit::tryFrom('bar'));
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
 ?>
---EXPECTF--
-Fatal error: Duplicate value in enum Suit for cases Hearts and Spades in %s on line %s
+--EXPECT--
+Error: Duplicate value in enum Suit for cases Hearts and Spades
+Error: Duplicate value in enum Suit for cases Hearts and Spades
+Error: Duplicate value in enum Suit for cases Hearts and Spades
+Error: Duplicate value in enum Suit for cases Hearts and Spades

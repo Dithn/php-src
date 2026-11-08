@@ -1,12 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.php.net/license/3_01.txt                                  |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Mel Dafert (mel@dafert.at)                                  |
    +----------------------------------------------------------------------+
@@ -36,9 +36,7 @@ typedef struct {
 	zend_object	zo;
 } IntlDatePatternGenerator_object;
 
-static inline IntlDatePatternGenerator_object *php_intl_datepatterngenerator_fetch_object(zend_object *obj) {
-	return (IntlDatePatternGenerator_object *)((char*)(obj) - XtOffsetOf(IntlDatePatternGenerator_object, zo));
-}
+#define php_intl_datepatterngenerator_fetch_object(obj) ZEND_CONTAINER_OF(obj, IntlDatePatternGenerator_object, zo)
 #define Z_INTL_DATEPATTERNGENERATOR_P(zv) php_intl_datepatterngenerator_fetch_object(Z_OBJ_P(zv))
 
 #define DTPATTERNGEN_ERROR(dtpgo)		(dtpgo)->err
@@ -57,10 +55,12 @@ static inline IntlDatePatternGenerator_object *php_intl_datepatterngenerator_fet
 		RETURN_THROWS(); \
 	}
 
+BEGIN_EXTERN_C()
 void dateformat_register_IntlDatePatternGenerator_class(void);
 
 extern zend_class_entry *IntlDatePatternGenerator_ce_ptr;
 
 extern zend_object_handlers IntlDatePatternGenerator_handlers;
+END_EXTERN_C()
 
 #endif /* #ifndef DATEPATTERNGENERATOR_CLASS_H */

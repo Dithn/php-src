@@ -1,0 +1,18 @@
+--TEST--
+Ensure that Dom\Node::$prefix is read-only
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+$dom = Dom\HTMLDocument::createEmpty();
+$div = $dom->createElement('div');
+try {
+    $div->prefix = "foo";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+echo $dom->saveXml();
+?>
+--EXPECT--
+Error: Cannot modify private(set) property Dom\Element::$prefix from global scope
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

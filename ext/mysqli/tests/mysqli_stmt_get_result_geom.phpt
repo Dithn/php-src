@@ -4,17 +4,14 @@ mysqli_stmt_get_result - geometry / spatial types
 mysqli
 --SKIPIF--
 <?php
-    require_once('skipifconnectfailure.inc');
-
-    if (!function_exists('mysqli_stmt_get_result'))
-        die("skip mysqli_stmt_get_result() not available");
+    require_once 'skipifconnectfailure.inc';
 
     if (!defined("MYSQLI_TYPE_GEOMETRY"))
         die("skip MYSQLI_TYPE_GEOMETRY not defined");
 ?>
 --FILE--
 <?php
-    require('connect.inc');
+    require 'connect.inc';
     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
         printf("[001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
 
@@ -37,14 +34,8 @@ mysqli
             }
         }
 
-        if (!$stmt = mysqli_stmt_init($link)) {
-            printf("[%04d] [%d] %s\n", $offset + 6, mysqli_errno($link), mysqli_error($link));
-            return false;
-        }
-
-        if (!mysqli_stmt_prepare($stmt, "SELECT id, label FROM test")) {
-            printf("[%04d] [%d] %s\n", $offset + 7, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
-            mysqli_stmt_close($stmt);
+        if (!($stmt = mysqli_prepare($link, "SELECT id, label FROM test"))) {
+            printf("[%04d] [%d] %s\n", $offset + 7, mysqli_errno($link), mysqli_error($link));
             return false;
         }
 
@@ -69,13 +60,8 @@ mysqli
         while ($row = mysqli_fetch_assoc($res)) {
             $bind_res = &$row['label'];
 
-            if (!$stmt2 = mysqli_stmt_init($link)) {
+            if (!($stmt2 = mysqli_prepare($link, "INSERT INTO test(id, label) VALUES (?, ?)"))) {
                 printf("[%04d] [%d] %s\n", $offset + 11, mysqli_errno($link), mysqli_error($link));
-                return false;
-            }
-
-            if (!mysqli_stmt_prepare($stmt2, "INSERT INTO test(id, label) VALUES (?, ?)")) {
-                printf("[%04d] [%d] %s\n", $offset + 12, mysqli_stmt_errno($stmt2), mysqli_stmt_error($stmt2));
                 return false;
             }
 
@@ -138,7 +124,7 @@ mysqli
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECT--
 done!

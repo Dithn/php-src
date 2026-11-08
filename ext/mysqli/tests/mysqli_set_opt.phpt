@@ -4,11 +4,11 @@ mysqli_set_opt()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once("connect.inc");
+    require_once 'connect.inc';
 
     $link = mysqli_init();
 
@@ -24,7 +24,12 @@ require_once('skipifconnectfailure.inc');
     var_dump(mysqli_set_opt($link, MYSQLI_OPT_CONNECT_TIMEOUT, 10));
     var_dump(mysqli_set_opt($link, MYSQLI_OPT_LOCAL_INFILE, 1));
     var_dump(mysqli_set_opt($link, MYSQLI_INIT_COMMAND, 'SET AUTOCOMMIT=0'));
-    var_dump(mysqli_set_opt($link, MYSQLI_CLIENT_SSL, 'not an mysqli_option'));
+    
+    try {
+        var_dump(mysqli_set_opt($link, MYSQLI_CLIENT_SSL, 'not an mysqli_option'));
+    } catch (ValueError $exception) {
+        echo $exception->getMessage() . "\n";
+    }
 
     mysqli_close($link);
 
@@ -48,6 +53,6 @@ bool(true)
 bool(true)
 bool(true)
 bool(true)
-bool(false)
+mysqli_set_opt(): Argument #2 ($option) must be MYSQLI_INIT_COMMAND, MYSQLI_SET_CHARSET_NAME, MYSQLI_SERVER_PUBLIC_KEY, or one of the MYSQLI_OPT_* constants
 mysqli object is already closed
 done!

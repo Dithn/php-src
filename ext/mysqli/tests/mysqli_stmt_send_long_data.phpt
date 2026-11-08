@@ -4,16 +4,12 @@ mysqli_stmt_send_long_data()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+if (getenv("SKIP_SLOW_TESTS")) die('skip slow test');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once("connect.inc");
-
-    require('table.inc');
-
-    if (!$stmt = mysqli_stmt_init($link))
-        printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+    require 'table.inc';
 
     if (!mysqli_query($link, "DROP TABLE IF EXISTS test"))
         printf("[005] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
@@ -21,8 +17,8 @@ require_once('skipifconnectfailure.inc');
     if (!mysqli_query($link, sprintf("CREATE TABLE test(id INT NOT NULL AUTO_INCREMENT, label LONGBLOB, PRIMARY KEY(id)) ENGINE = %s", $engine)))
         printf("[006] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
 
-    if (!mysqli_stmt_prepare($stmt, "INSERT INTO test(id, label) VALUES (?, ?)"))
-        printf("[007] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
+    if (!$stmt = mysqli_prepare($link, "INSERT INTO test(id, label) VALUES (?, ?)"))
+        printf("[007] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
 
     $id = null;
     $label = null;
@@ -65,7 +61,7 @@ require_once('skipifconnectfailure.inc');
     assert(strlen($blob) <= $max_allowed_packet);
 
     try {
-        $tmp = mysqli_stmt_send_long_data($stmt, -1, $blob);
+        mysqli_stmt_send_long_data($stmt, -1, $blob);
     } catch (\ValueError $e) {
         echo $e->getMessage() . \PHP_EOL;
     }
@@ -106,7 +102,7 @@ require_once('skipifconnectfailure.inc');
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECT--
 mysqli_stmt_send_long_data(): Argument #2 ($param_num) must be greater than or equal to 0

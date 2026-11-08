@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Taken from: ext/standard/md5.c                                       |
   +----------------------------------------------------------------------+
@@ -29,7 +27,8 @@ const php_hash_ops php_hash_md5_ops = {
 	16,
 	64,
 	sizeof(PHP_MD5_CTX),
-	1
+	1,
+	0
 };
 
 const php_hash_ops php_hash_md4_ops = {
@@ -44,10 +43,11 @@ const php_hash_ops php_hash_md4_ops = {
 	16,
 	64,
 	sizeof(PHP_MD4_CTX),
-	1
+	1,
+	0
 };
 
-static int php_md2_unserialize(php_hashcontext_object *hash, zend_long magic, const zval *zv);
+static hash_spec_result php_md2_unserialize(php_hashcontext_object *hash, zend_long magic, const zval *zv);
 
 const php_hash_ops php_hash_md2_ops = {
 	"md2",
@@ -61,7 +61,8 @@ const php_hash_ops php_hash_md2_ops = {
 	16,
 	16,
 	sizeof(PHP_MD2_CTX),
-	1
+	1,
+	0
 };
 
 /* MD common stuff */
@@ -204,7 +205,8 @@ PHP_HASH_API void PHP_MD4InitArgs(PHP_MD4_CTX * context, ZEND_ATTRIBUTE_UNUSED H
  */
 PHP_HASH_API void PHP_MD4Update(PHP_MD4_CTX * context, const unsigned char *input, size_t inputLen)
 {
-	unsigned int i, index, partLen;
+	unsigned int index, partLen;
+	size_t i;
 
 	/* Compute number of bytes mod 64 */
 	index = (unsigned int) ((context->count[0] >> 3) & 0x3F);
@@ -213,7 +215,7 @@ PHP_HASH_API void PHP_MD4Update(PHP_MD4_CTX * context, const unsigned char *inpu
 	if ((context->count[0] += ((uint32_t) inputLen << 3))
 		< ((uint32_t) inputLen << 3))
 		context->count[1]++;
-	context->count[1] += ((uint32_t) inputLen >> 29);
+	context->count[1] += (uint32_t) (inputLen >> 29);
 
 	partLen = 64 - index;
 
@@ -238,7 +240,7 @@ PHP_HASH_API void PHP_MD4Update(PHP_MD4_CTX * context, const unsigned char *inpu
 /* }}} */
 
 /* {{{ PHP_MD4Final
-   MD4 finalization. Ends an MD4 message-digest operation, writing the
+   MD4 finalization. Ends an MD4 message-digest operation, writing
    the message digest and zeroizing the context.
  */
 PHP_HASH_API void PHP_MD4Final(unsigned char digest[16], PHP_MD4_CTX * context)
@@ -355,15 +357,15 @@ PHP_HASH_API void PHP_MD2Final(unsigned char output[16], PHP_MD2_CTX *context)
 	memcpy(output, context->state, 16);
 }
 
-static int php_md2_unserialize(php_hashcontext_object *hash, zend_long magic, const zval *zv)
+static hash_spec_result php_md2_unserialize(php_hashcontext_object *hash, zend_long magic, const zval *zv)
 {
 	PHP_MD2_CTX *ctx = (PHP_MD2_CTX *) hash->context;
-	int r = FAILURE;
+	hash_spec_result r = HASH_SPEC_FAILURE;
 	if (magic == PHP_HASH_SERIALIZE_MAGIC_SPEC
-		&& (r = php_hash_unserialize_spec(hash, zv, PHP_MD2_SPEC)) == SUCCESS
+		&& (r = php_hash_unserialize_spec(hash, zv, PHP_MD2_SPEC)) == HASH_SPEC_SUCCESS
 		&& (unsigned char) ctx->in_buffer < sizeof(ctx->buffer)) {
-		return SUCCESS;
-	} else {
-		return r != SUCCESS ? r : -2000;
+		return HASH_SPEC_SUCCESS;
 	}
+
+    return r != HASH_SPEC_SUCCESS ? r : CONTEXT_VALIDATION_FAILURE;
 }

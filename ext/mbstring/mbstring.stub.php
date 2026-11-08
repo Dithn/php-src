@@ -2,6 +2,56 @@
 
 /** @generate-class-entries */
 
+#ifdef HAVE_MBREGEX
+/**
+ * @var string
+ * @cvalue php_mb_oniguruma_version
+ */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
+const MB_ONIGURUMA_VERSION = UNKNOWN;
+#endif
+
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_UPPER
+ */
+const MB_CASE_UPPER = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_LOWER
+ */
+const MB_CASE_LOWER = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_TITLE
+ */
+const MB_CASE_TITLE = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_FOLD
+ */
+const MB_CASE_FOLD = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_UPPER_SIMPLE
+ */
+const MB_CASE_UPPER_SIMPLE = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_LOWER_SIMPLE
+ */
+const MB_CASE_LOWER_SIMPLE = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_TITLE_SIMPLE
+ */
+const MB_CASE_TITLE_SIMPLE = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PHP_UNICODE_CASE_FOLD_SIMPLE
+ */
+const MB_CASE_FOLD_SIMPLE = UNKNOWN;
+
 /** @refcount 1 */
 function mb_language(?string $language = null): string|bool {}
 
@@ -69,7 +119,6 @@ function mb_strcut(string $string, int $start, ?int $length = null, ?string $enc
 
 function mb_strwidth(string $string, ?string $encoding = null): int {}
 
-/** @refcount 1 */
 function mb_strimwidth(string $string, int $start, int $width, string $trim_marker = "", ?string $encoding = null): string {}
 
 /**
@@ -87,12 +136,21 @@ function mb_strtoupper(string $string, ?string $encoding = null): string {}
 /** @refcount 1 */
 function mb_strtolower(string $string, ?string $encoding = null): string {}
 
+function mb_ucfirst(string $string, ?string $encoding = null): string {}
+
+function mb_lcfirst(string $string, ?string $encoding = null): string {}
+
+function mb_trim(string $string, ?string $characters = null, ?string $encoding = null): string {}
+
+function mb_ltrim(string $string, ?string $characters = null, ?string $encoding = null): string {}
+
+function mb_rtrim(string $string, ?string $characters = null, ?string $encoding = null): string {}
+
 /** @refcount 1 */
 function mb_detect_encoding(string $string, array|string|null $encodings = null, bool $strict = false): string|false {}
 
 /**
  * @return array<int, string>
- * @refcount 1
  */
 function mb_list_encodings(): array {}
 
@@ -123,10 +181,10 @@ function mb_decode_numericentity(string $string, array $map, ?string $encoding =
 function mb_send_mail(string $to, string $subject, string $message, array|string $additional_headers = [], ?string $additional_params = null): bool {}
 
 /**
- * @return array<int|string, int|string|array>|string|int|false
+ * @return array<int|string, int|string|array>|string|int|false|null
  * @refcount 1
  */
-function mb_get_info(string $type = "all"): array|string|int|false {}
+function mb_get_info(string $type = "all"): array|string|int|false|null {}
 
 function mb_check_encoding(array|string|null $value = null, ?string $encoding = null): bool {}
 
@@ -136,59 +194,77 @@ function mb_ord(string $string, ?string $encoding = null): int|false {}
 
 function mb_chr(int $codepoint, ?string $encoding = null): string|false {}
 
+function mb_str_pad(string $string, int $length, string $pad_string = " ", int $pad_type = STR_PAD_RIGHT, ?string $encoding = null): string {}
+
 #ifdef HAVE_MBREGEX
 /** @refcount 1 */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_regex_encoding(?string $encoding = null): string|bool {}
 
 /** @param array $matches */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg(string $pattern, string $string, &$matches = null): bool {}
 
 /** @param array $matches */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_eregi(string $pattern, string $string, &$matches = null): bool {}
 
 /** @refcount 1 */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_replace(string $pattern, string $replacement, string $string, ?string $options = null): string|false|null {}
 
 /** @refcount 1 */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_eregi_replace(string $pattern, string $replacement, string $string, ?string $options = null): string|false|null {}
 
 /** @refcount 1 */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_replace_callback(string $pattern, callable $callback, string $string, ?string $options = null): string|false|null {}
 
 /**
  * @return array<int, string>|false
  * @refcount 1
  */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_split(string $pattern, string $string, int $limit = -1): array|false {}
 
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_match(string $pattern, string $string, ?string $options = null): bool {}
 
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search(?string $pattern = null, ?string $options = null): bool {}
 
 /**
  * @return array<int, int>|false
  * @refcount 1
  */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_pos(?string $pattern = null, ?string $options = null): array|false {}
 
 /**
  * @return array<int|string, string|false>|false
  * @refcount 1
  */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_regs(?string $pattern = null, ?string $options = null): array|false {}
 
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_init(string $string, ?string $pattern = null, ?string $options = null): bool {}
 
 /**
  * @return array<int|string, string|false>|false
  * @refcount 1
  */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_getregs(): array|false {}
 
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_getpos(): int {}
 
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_ereg_search_setpos(int $offset): bool {}
 
 /** @refcount 1 */
+#[\Deprecated(since: '8.6', message: "because the underlying library is no longer maintained")]
 function mb_regex_set_options(?string $options = null): string {}
 #endif

@@ -2,15 +2,13 @@
    +----------------------------------------------------------------------+
    | Zend OPcache                                                         |
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Andi Gutmans <andi@php.net>                                 |
    |          Zeev Suraski <zeev@php.net>                                 |
@@ -25,9 +23,9 @@
 #include "zend_shared_alloc.h"
 
 /* Generated on an Octa-ALPHA 300MHz CPU & 2.5GB RAM monster */
-static uint32_t prime_numbers[] =
+static const uint32_t prime_numbers[] =
 	{5, 11, 19, 53, 107, 223, 463, 983, 1979, 3907, 7963, 16229, 32531, 65407, 130987, 262237, 524521, 1048793 };
-static uint32_t num_prime_numbers = sizeof(prime_numbers) / sizeof(uint32_t);
+static const uint32_t num_prime_numbers = sizeof(prime_numbers) / sizeof(uint32_t);
 
 void zend_accel_hash_clean(zend_accel_hash *accel_hash)
 {
@@ -138,7 +136,7 @@ zend_accel_hash_entry* zend_accel_hash_update(zend_accel_hash *accel_hash, zend_
 	return entry;
 }
 
-static zend_always_inline void* zend_accel_hash_find_ex(zend_accel_hash *accel_hash, zend_string *key, int data)
+static zend_always_inline void* zend_accel_hash_find_ex(const zend_accel_hash *accel_hash, zend_string *key, bool data)
 {
 	zend_ulong index;
 	zend_accel_hash_entry *entry;
@@ -176,20 +174,20 @@ static zend_always_inline void* zend_accel_hash_find_ex(zend_accel_hash *accel_h
 /* Returns the data associated with key on success
  * Returns NULL if data doesn't exist
  */
-void* zend_accel_hash_find(zend_accel_hash *accel_hash, zend_string *key)
+void* zend_accel_hash_find(const zend_accel_hash *accel_hash, zend_string *key)
 {
-	return zend_accel_hash_find_ex(accel_hash, key, 1);
+	return zend_accel_hash_find_ex(accel_hash, key, true);
 }
 
 /* Returns the hash entry associated with key on success
  * Returns NULL if it doesn't exist
  */
-zend_accel_hash_entry* zend_accel_hash_find_entry(zend_accel_hash *accel_hash, zend_string *key)
+zend_accel_hash_entry* zend_accel_hash_find_entry(const zend_accel_hash *accel_hash, zend_string *key)
 {
-	return (zend_accel_hash_entry *)zend_accel_hash_find_ex(accel_hash, key, 0);
+	return (zend_accel_hash_entry *)zend_accel_hash_find_ex(accel_hash, key, false);
 }
 
-int zend_accel_hash_unlink(zend_accel_hash *accel_hash, zend_string *key)
+zend_result zend_accel_hash_unlink(zend_accel_hash *accel_hash, zend_string *key)
 {
 	zend_ulong hash_value;
 	zend_ulong index;

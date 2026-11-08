@@ -1,6 +1,7 @@
 --TEST--
 session rfc1867 sid post
 --INI--
+display_startup_errors=0
 file_uploads=1
 upload_max_filesize=1024
 session.save_path=
@@ -17,7 +18,7 @@ session.save_handler=files
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --POST_RAW--
 Content-Type: multipart/form-data; boundary=---------------------------20896060251896012921717172737
 -----------------------------20896060251896012921717172737

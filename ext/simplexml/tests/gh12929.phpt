@@ -1,0 +1,29 @@
+--TEST--
+GH-12929 (SimpleXMLElement with stream_wrapper_register can segfault)
+--EXTENSIONS--
+simplexml
+--FILE--
+<?php
+$scheme = "foo1";
+stream_wrapper_register($scheme, "SimpleXMLIterator");
+try {
+    file_get_contents($scheme . "://x");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+    echo $e->getPrevious()->getMessage(), "\n";
+}
+
+$scheme = "foo2";
+stream_wrapper_register($scheme, "SimpleXMLElement");
+try {
+    file_get_contents($scheme . "://x");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+    echo $e->getPrevious()->getMessage(), "\n";
+}
+?>
+--EXPECT--
+TypeError: It's not possible to assign a complex type to properties, resource given
+SimpleXMLElement is not properly initialized
+TypeError: It's not possible to assign a complex type to properties, resource given
+SimpleXMLElement is not properly initialized

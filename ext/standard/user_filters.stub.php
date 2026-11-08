@@ -2,6 +2,38 @@
 
 /** @generate-class-entries */
 
+/**
+ * @var int
+ * @cvalue PSFS_PASS_ON
+ */
+const PSFS_PASS_ON = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PSFS_FEED_ME
+ */
+const PSFS_FEED_ME = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PSFS_ERR_FATAL
+ */
+const PSFS_ERR_FATAL = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue PSFS_FLAG_NORMAL
+ */
+const PSFS_FLAG_NORMAL = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PSFS_FLAG_FLUSH_INC
+ */
+const PSFS_FLAG_FLUSH_INC = UNKNOWN;
+/**
+ * @var int
+ * @cvalue PSFS_FLAG_FLUSH_CLOSE
+ */
+const PSFS_FLAG_FLUSH_CLOSE = UNKNOWN;
+
 class php_user_filter
 {
     public string $filtername = "";
@@ -18,8 +50,26 @@ class php_user_filter
     public function filter($in, $out, &$consumed, bool $closing): int {}
 
     /** @tentative-return-type */
+    public function seek(int $offset, int $whence, int $chain): bool {}
+
+    /** @tentative-return-type */
     public function onCreate(): bool {}
 
     /** @tentative-return-type */
     public function onClose(): void {}
+}
+
+final class StreamBucket
+{
+    /**
+     * @var resource
+     * @readonly
+     */
+    public $bucket;
+    /** @readonly */
+    public string $data;
+    /** @readonly */
+    public int $datalen;
+    /** @readonly */
+    public int $dataLength;
 }

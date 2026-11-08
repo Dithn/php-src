@@ -1,6 +1,7 @@
 --TEST--
 session rfc1867 sid get 2
 --INI--
+display_startup_errors=0
 file_uploads=1
 upload_max_filesize=1024
 session.save_path=
@@ -17,7 +18,7 @@ session.save_handler=files
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --COOKIE--
 PHPSESSID=rfc1867-sid-get-2-cookie
 --GET--

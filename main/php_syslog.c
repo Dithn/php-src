@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Philip Prindeville <philipp@redfish-solutions.com>           |
    +----------------------------------------------------------------------+
@@ -58,7 +56,7 @@ PHPAPI void php_syslog_str(int priority, const zend_string* message)
 		} else if ((c < 0x20) && (PG(syslog_filter) == PHP_SYSLOG_FILTER_ALL)) {
 			smart_string_appendc(&sbuf, c);
 		} else {
-			const char xdigits[] = "0123456789abcdef";
+			static const char xdigits[] = "0123456789abcdef";
 
 			smart_string_appendl(&sbuf, "\\x", 2);
 			smart_string_appendc(&sbuf, xdigits[c >> 4]);
@@ -69,6 +67,18 @@ PHPAPI void php_syslog_str(int priority, const zend_string* message)
 	/* Smart string is not NUL terminated */
 	syslog(priority, "%.*s", (int)sbuf.len, sbuf.c);
 	smart_string_free(&sbuf);
+}
+
+void php_openlog(const char *ident, int option, int facility)
+{
+	openlog(ident, option, facility);
+	PG(have_called_openlog) = 1;
+}
+
+void php_closelog(void)
+{
+	closelog();
+	PG(have_called_openlog) = 0;
 }
 
 #ifdef PHP_WIN32

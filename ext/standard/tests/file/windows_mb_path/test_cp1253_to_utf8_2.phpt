@@ -2,12 +2,8 @@
 Test fopen() for write cp1253 to UTF-8 path
 --SKIPIF--
 <?php
-include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
-
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
-
 ?>
 --CONFLICTS--
 dir_cp1253
@@ -21,8 +17,8 @@ dir_cp1253
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = "διαδρομή δοκιμής";
-$prefix = create_data("dir_cp1253", "${item}42}");
-$fn = $prefix . DIRECTORY_SEPARATOR . "${item}33";
+$prefix = create_data("dir_cp1253", "{$item}42}");
+$fn = $prefix . DIRECTORY_SEPARATOR . "{$item}33";
 
 $f = fopen($fn, 'w');
 if ($f) {

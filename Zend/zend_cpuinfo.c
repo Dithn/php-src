@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Xinchen Hui <xinchen.h@zend.com>                            |
    +----------------------------------------------------------------------+
@@ -28,15 +27,15 @@ typedef struct _zend_cpu_info {
 
 static zend_cpu_info cpuinfo = {0};
 
-#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
-# if defined(HAVE_CPUID_H) && defined(HAVE_CPUID_COUNT)
-# include <cpuid.h>
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__i386__) || defined(__x86_64__))
+# if defined(HAVE_CPUID_H) && defined(HAVE_CPUID_COUNT) /* use cpuid.h functions */
+#  include <cpuid.h>
 static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
 	__cpuid_count(func, subfunc, cpuinfo->eax, cpuinfo->ebx, cpuinfo->ecx, cpuinfo->edx);
 }
-# else
+# else /* use inline asm */
 static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
-#if defined(__i386__) && (defined(__pic__) || defined(__PIC__))
+#  if defined(__i386__) && (defined(__pic__) || defined(__PIC__))
 	/* PIC on i386 uses %ebx, so preserve it. */
 	__asm__ __volatile__ (
 		"pushl  %%ebx\n"
@@ -46,16 +45,16 @@ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo
 		: "=a"(cpuinfo->eax), "=r"(cpuinfo->ebx), "=c"(cpuinfo->ecx), "=d"(cpuinfo->edx)
 		: "a"(func), "c"(subfunc)
 	);
-#else
+#  else
 	__asm__ __volatile__ (
 		"cpuid"
 		: "=a"(cpuinfo->eax), "=b"(cpuinfo->ebx), "=c"(cpuinfo->ecx), "=d"(cpuinfo->edx)
 		: "a"(func), "c"(subfunc)
 	);
-#endif
+#  endif
 }
 # endif
-#elif defined(ZEND_WIN32) && !defined(__clang__)
+#elif defined(_MSC_VER) && !defined(__clang__) && (defined(_M_X64) || defined(_M_IX86)) /* use MSVC __cpuidex intrin */
 # include <intrin.h>
 static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
 	int regs[4];
@@ -67,15 +66,15 @@ static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo
 	cpuinfo->ecx = regs[2];
 	cpuinfo->edx = regs[3];
 }
-#else
+#else /* fall back to zero */
 static void __zend_cpuid(uint32_t func, uint32_t subfunc, zend_cpu_info *cpuinfo) {
 	cpuinfo->eax = 0;
 }
 #endif
 
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_X64) || defined(_M_IX86)
 /* Function based on compiler-rt implementation. */
-static unsigned get_xcr0_eax() {
+static unsigned get_xcr0_eax(void) {
 # if defined(__GNUC__) || defined(__clang__)
 	// Check xgetbv; this uses a .byte sequence instead of the instruction
 	// directly because older assemblers do not include support for xgetbv and
@@ -90,24 +89,24 @@ static unsigned get_xcr0_eax() {
 # endif
 }
 
-static bool is_avx_supported() {
+static bool is_avx_supported(void) {
 	if (!(cpuinfo.ecx & ZEND_CPU_FEATURE_AVX)) {
 		/* No support for AVX */
-		return 0;
+		return false;
 	}
 	if (!(cpuinfo.ecx & ZEND_CPU_FEATURE_OSXSAVE)) {
 		/* The operating system does not support XSAVE. */
-		return 0;
+		return false;
 	}
 	if ((get_xcr0_eax() & 0x6) != 0x6) {
 		/* XCR0 SSE and AVX bits must be set. */
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
 }
 #else
 static bool is_avx_supported(void) {
-	return 0;
+	return false;
 }
 #endif
 
@@ -135,7 +134,7 @@ void zend_cpu_startup(void)
 		}
 
 		if (!is_avx_supported()) {
-			cpuinfo.edx &= ~ZEND_CPU_FEATURE_AVX;
+			cpuinfo.ecx &= ~ZEND_CPU_FEATURE_AVX;
 			cpuinfo.ebx &= ~(ZEND_CPU_FEATURE_AVX2 & ~ZEND_CPU_EBX_MASK);
 		}
 	}

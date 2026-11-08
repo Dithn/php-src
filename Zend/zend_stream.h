@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Wez Furlong <wez@thebrainroom.com>                          |
    |          Scott MacVicar <scottmac@php.net>                           |
@@ -24,6 +23,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#include "zend_types.h"
 
 /* Lightweight stream implementation for the ZE scanners.
  * These functions are private to the engine.
@@ -55,7 +56,7 @@ typedef struct _zend_file_handle {
 	} handle;
 	zend_string       *filename;
 	zend_string       *opened_path;
-	zend_uchar        type; /* packed zend_stream_type */
+	uint8_t           type; /* packed zend_stream_type */
 	bool              primary_script;
 	bool              in_list; /* added into CG(open_file) */
 	char              *buf;

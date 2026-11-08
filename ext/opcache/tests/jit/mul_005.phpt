@@ -4,7 +4,6 @@ JIT MUL: 005 exception and SEND optimization
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 opcache.jit=function
 opcache.protect_memory=1
 --EXTENSIONS--
@@ -17,9 +16,9 @@ function test($a) {
     
 try {
     test('foo');
-} catch (TypeError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }   
 ?>
 --EXPECT--
-Unsupported operand types: string * int
+TypeError: Unsupported operand types: string * int

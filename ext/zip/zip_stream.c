@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Piere-Alain Joye <pierre@php.net>                            |
   +----------------------------------------------------------------------+
@@ -26,8 +24,6 @@
 #include "fopen_wrappers.h"
 #include "php_zip.h"
 
-#include "ext/standard/url.h"
-
 /* needed for ssize_t definition */
 #include <sys/types.h>
 
@@ -36,6 +32,7 @@ struct php_zip_stream_data_t {
 	struct zip_file *zf;
 	size_t cursor;
 	php_stream *stream;
+	php_zip_archive *archive;
 };
 
 #define STREAM_DATA_FROM_STREAM() \
@@ -51,18 +48,11 @@ static ssize_t php_zip_ops_read(php_stream *stream, char *buf, size_t count)
 	if (self->zf) {
 		n = zip_fread(self->zf, buf, count);
 		if (n < 0) {
-#if LIBZIP_VERSION_MAJOR < 1
-			int ze, se;
-			zip_file_error_get(self->zf, &ze, &se);
-			stream->eof = 1;
-			php_error_docref(NULL, E_WARNING, "Zip stream error: %s", zip_file_strerror(self->zf));
-#else
 			zip_error_t *err;
 			err = zip_file_get_error(self->zf);
 			stream->eof = 1;
 			php_error_docref(NULL, E_WARNING, "Zip stream error: %s", zip_error_strerror(err));
 			zip_error_fini(err);
-#endif
 			return -1;
 		}
 		/* cast count to signed value to avoid possibly negative n
@@ -84,7 +74,7 @@ static ssize_t php_zip_ops_write(php_stream *stream, const char *buf, size_t cou
 		return -1;
 	}
 
-	return count;
+	return (ssize_t)count;
 }
 /* }}} */
 
@@ -92,6 +82,7 @@ static ssize_t php_zip_ops_write(php_stream *stream, const char *buf, size_t cou
 static int php_zip_ops_close(php_stream *stream, int close_handle)
 {
 	STREAM_DATA_FROM_STREAM();
+	bool bailout = false;
 	if (close_handle) {
 		if (self->zf) {
 			zip_fclose(self->zf);
@@ -103,8 +94,17 @@ static int php_zip_ops_close(php_stream *stream, int close_handle)
 			self->za = NULL;
 		}
 	}
+
+	/* the archive ref is tied to self, so release it regardless of close_handle */
+	if (self->archive) {
+		bailout = php_zip_archive_release(self->archive);
+		self->archive = NULL;
+	}
 	efree(self);
 	stream->abstract = NULL;
+	if (bailout) {
+		zend_bailout();
+	}
 	return EOF;
 }
 /* }}} */
@@ -127,12 +127,11 @@ static int php_zip_ops_stat(php_stream *stream, php_stream_statbuf *ssb) /* {{{ 
 	size_t path_len = strlen(stream->orig_path);
 	char file_dirname[MAXPATHLEN];
 	struct zip *za;
-	char *fragment;
 	size_t fragment_len;
 	int err;
 	zend_string *file_basename;
 
-	fragment = strchr(path, '#');
+	const char *fragment = strchr(path, '#');
 	if (!fragment) {
 		return -1;
 	}
@@ -159,16 +158,16 @@ static int php_zip_ops_stat(php_stream *stream, php_stream_statbuf *ssb) /* {{{ 
 	fragment++;
 
 	if (ZIP_OPENBASEDIR_CHECKPATH(file_dirname)) {
-		zend_string_release_ex(file_basename, 0);
+		zend_string_release_ex(file_basename, false);
 		return -1;
 	}
 
-	za = zip_open(file_dirname, ZIP_CREATE, &err);
+	za = zip_open(file_dirname, ZIP_RDONLY, &err);
 	if (za) {
 		memset(ssb, 0, sizeof(php_stream_statbuf));
 		if (zip_stat(za, fragment, ZIP_FL_NOCASE, &sb) != 0) {
 			zip_close(za);
-			zend_string_release_ex(file_basename, 0);
+			zend_string_release_ex(file_basename, false);
 			return -1;
 		}
 		zip_close(za);
@@ -186,17 +185,51 @@ static int php_zip_ops_stat(php_stream *stream, php_stream_statbuf *ssb) /* {{{ 
 		ssb->sb.st_ctime = sb.mtime;
 		ssb->sb.st_nlink = 1;
 		ssb->sb.st_rdev = -1;
-#ifndef PHP_WIN32
+#ifdef HAVE_STRUCT_STAT_ST_BLKSIZE
 		ssb->sb.st_blksize = -1;
+#endif
+#ifdef HAVE_STRUCT_STAT_ST_BLOCKS
 		ssb->sb.st_blocks = -1;
 #endif
 		ssb->sb.st_ino = -1;
+	} else {
+		zend_string_release_ex(file_basename, 0);
+		return -1;
 	}
-	zend_string_release_ex(file_basename, 0);
+	zend_string_release_ex(file_basename, false);
 	return 0;
 }
 /* }}} */
 
+#if LIBZIP_ATLEAST(1,9,1)
+/* {{{ php_zip_ops_seek */
+static int php_zip_ops_seek(php_stream *stream, zend_off_t offset, int whence, zend_off_t *newoffset)
+{
+	int ret = -1;
+	STREAM_DATA_FROM_STREAM();
+
+	if (self->zf) {
+		ret = zip_fseek(self->zf, offset, whence);
+		*newoffset = zip_ftell(self->zf);
+	}
+
+	return ret;
+}
+/* }}} */
+
+/* with seek command */
+const php_stream_ops php_stream_zipio_seek_ops = {
+	php_zip_ops_write, php_zip_ops_read,
+	php_zip_ops_close, php_zip_ops_flush,
+	"zip",
+	php_zip_ops_seek, /* seek */
+	NULL, /* cast */
+	php_zip_ops_stat, /* stat */
+	NULL  /* set_option */
+};
+#endif
+
+/* without seek command */
 const php_stream_ops php_stream_zipio_ops = {
 	php_zip_ops_write, php_zip_ops_read,
 	php_zip_ops_close, php_zip_ops_flush,
@@ -208,8 +241,9 @@ const php_stream_ops php_stream_zipio_ops = {
 };
 
 /* {{{ php_stream_zip_open */
-php_stream *php_stream_zip_open(struct zip *arch, struct zip_stat *sb, const char *mode, zip_flags_t flags STREAMS_DC)
+php_stream *php_stream_zip_open(ze_zip_object *obj, struct zip_stat *sb, const char *mode, zip_flags_t flags STREAMS_DC)
 {
+	struct zip *arch = php_zip_object_za(obj);
 	struct zip_file *zf = NULL;
 
 	php_stream *stream = NULL;
@@ -228,7 +262,17 @@ php_stream *php_stream_zip_open(struct zip *arch, struct zip_stat *sb, const cha
 			self->zf = zf;
 			self->stream = NULL;
 			self->cursor = 0;
-			stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+			/* keep the zip_t alive while the stream borrows it */
+			self->archive = obj->archive;
+			php_zip_archive_addref(self->archive);
+#if LIBZIP_ATLEAST(1,9,1)
+			if (zip_file_is_seekable(zf) > 0) {
+				stream = php_stream_alloc(&php_stream_zipio_seek_ops, self, NULL, mode);
+			} else
+#endif
+			{
+				stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+			}
 			stream->orig_path = estrdup(sb->name);
 		}
 	}
@@ -252,14 +296,13 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
 
 	struct zip *za;
 	struct zip_file *zf = NULL;
-	char *fragment;
 	size_t fragment_len;
 	int err;
 
 	php_stream *stream = NULL;
 	struct php_zip_stream_data_t *self;
 
-	fragment = strchr(path, '#');
+	const char *fragment = strchr(path, '#');
 	if (!fragment) {
 		return NULL;
 	}
@@ -285,11 +328,11 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
 	fragment++;
 
 	if (ZIP_OPENBASEDIR_CHECKPATH(file_dirname)) {
-		zend_string_release_ex(file_basename, 0);
+		zend_string_release_ex(file_basename, false);
 		return NULL;
 	}
 
-	za = zip_open(file_dirname, ZIP_CREATE, &err);
+	za = zip_open(file_dirname, ZIP_RDONLY, &err);
 	if (za) {
 		zval *tmpzval;
 
@@ -307,17 +350,25 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
 			self->zf = zf;
 			self->stream = NULL;
 			self->cursor = 0;
-			stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+			self->archive = NULL;
+#if LIBZIP_ATLEAST(1,9,1)
+			if (zip_file_is_seekable(zf) > 0) {
+				stream = php_stream_alloc(&php_stream_zipio_seek_ops, self, NULL, mode);
+			} else
+#endif
+			{
+				stream = php_stream_alloc(&php_stream_zipio_ops, self, NULL, mode);
+			}
 
 			if (opened_path) {
-				*opened_path = zend_string_init(path, strlen(path), 0);
+				*opened_path = zend_string_init(path, path_len, false);
 			}
 		} else {
 			zip_close(za);
 		}
 	}
 
-	zend_string_release_ex(file_basename, 0);
+	zend_string_release_ex(file_basename, false);
 
 	if (!stream) {
 		return NULL;

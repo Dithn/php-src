@@ -1,26 +1,24 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Anatol Belski <ab@php.net>                                   |
   +----------------------------------------------------------------------+
 */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_LMDB
+#ifdef DBA_LMDB
 #include "php_lmdb.h"
 
 #ifdef LMDB_INCLUDE_FILE
@@ -40,11 +38,32 @@ DBA_OPEN_FUNC(lmdb)
 {
 	MDB_env *env;
 	MDB_txn *txn;
-	int rc, flags = MDB_NOSUBDIR;
+	int rc;
 	int mode = info->file_permission;
 	zend_long map_size = info->map_size;
 
 	ZEND_ASSERT(map_size >= 0);
+
+	/* By default use the MDB_NOSUBDIR flag */
+	int flags = MDB_NOSUBDIR;
+	/* Use flags passed by the user for driver flags */
+	if (info->driver_flags != DBA_DEFAULT_DRIVER_FLAGS) {
+		ZEND_ASSERT(info->driver_flags >= 0);
+		switch (info->driver_flags) {
+			case 0:
+			case MDB_NOSUBDIR:
+				flags = info->driver_flags;
+				break;
+			default:
+				zend_argument_value_error(6, "must be either DBA_LMDB_USE_SUB_DIR or DBA_LMDB_NO_SUB_DIR for LMDB driver");
+				return FAILURE;
+		}
+	}
+
+	/* Add readonly flag if DB is opened in read only mode */
+	if (info->mode == DBA_READER) {
+		flags |= MDB_RDONLY;
+	}
 
 	rc = mdb_env_create(&env);
 	if (rc) {
@@ -60,13 +79,16 @@ DBA_OPEN_FUNC(lmdb)
 		}
 	}
 
-	rc = mdb_env_open(env, info->path, flags, mode);
+	rc = mdb_env_open(env, ZSTR_VAL(info->path), flags, mode);
 	if (rc) {
+		/* If this function [mdb_env_open()] fails, mdb_env_close() must be called to discard the MDB_env handle.
+		 * http://www.lmdb.tech/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340 */
+		mdb_env_close(env);
 		*error = mdb_strerror(rc);
 		return FAILURE;
 	}
 
-	rc = mdb_txn_begin(env, NULL, 0, &txn);
+	rc = mdb_txn_begin(env, NULL, /* flags */ MDB_RDONLY, &txn);
 	if (rc) {
 		mdb_env_close(env);
 		*error = mdb_strerror(rc);
@@ -243,6 +265,7 @@ DBA_DELETE_FUNC(lmdb)
 
 	php_error_docref(NULL, E_WARNING, "%s", mdb_strerror(rc));
 
+	mdb_txn_abort(LMDB_IT(txn));
 	return FAILURE;
 }
 
@@ -337,7 +360,7 @@ DBA_SYNC_FUNC(lmdb)
 
 DBA_INFO_FUNC(lmdb)
 {
-	return estrdup(MDB_VERSION_STRING);
+	return MDB_VERSION_STRING;
 }
 
 #endif

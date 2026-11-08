@@ -9,7 +9,7 @@ require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-require_once "connect.inc";
+require_once 'connect.inc';
 
 $link = mysqli_init();
 
@@ -29,20 +29,6 @@ if (!$link2 = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
         $host, $user, $db, $port, $socket);
 }
 
-if (!$res = mysqli_query($link2, 'SELECT version() AS server_version')) {
-    printf("[007] [%d] %s\n", mysqli_errno($link2), mysqli_error($link2));
-}
-$tmp = mysqli_fetch_assoc($res);
-mysqli_free_result($res);
-$version = explode('.', $tmp['server_version']);
-if (empty($version)) {
-    printf("[008] Cannot determine server version, need MySQL Server 4.1+ for the test!\n");
-}
-
-if ($version[0] <= 4 && $version[1] < 1) {
-    printf("[009] Need MySQL Server 4.1+ for the test!\n");
-}
-
 if (!$res = mysqli_query($link2, "SHOW CHARACTER SET")) {
     printf("[010] Cannot get list of available character sets, [%d] %s\n",
         mysqli_errno($link2), mysqli_error($link2));
@@ -58,7 +44,8 @@ mysqli_close($link2);
 foreach ($charsets as $charset) {
     /* The server currently 17.07.2007 can't handle data sent in ucs2 */
     /* The server currently 16.08.2010 can't handle data sent in utf16 and utf32 */
-    if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32') {
+    /* As of MySQL 8.0.28, `SHOW CHARACTER SET` contains utf8mb3, but that is not yet supported by mysqlnd */
+    if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32' || $charset['Charset'] == 'utf8mb3') {
         continue;
     }
     if (true !== mysqli_options($link, MYSQLI_SET_CHARSET_NAME, $charset['Charset'])) {
@@ -73,7 +60,13 @@ var_dump("MYSQLI_OPT_LOCAL_INFILE", mysqli_options($link, MYSQLI_OPT_LOCAL_INFIL
 var_dump("MYSQLI_INIT_COMMAND", mysqli_options($link, MYSQLI_INIT_COMMAND, 'SET AUTOCOMMIT=0'));
 
 /* mysqli_real_connect() */
-var_dump("MYSQLI_CLIENT_SSL", mysqli_options($link, MYSQLI_CLIENT_SSL, 'not a mysqli_option'));
+var_dump("MYSQLI_CLIENT_SSL");
+
+try {
+    var_dump(mysqli_options($link, MYSQLI_CLIENT_SSL, 'not a mysqli_option'));
+} catch (ValueError $exception) {
+    echo $exception->getMessage() . "\n";
+}
 
 mysqli_close($link);
 
@@ -90,15 +83,9 @@ $link = mysqli_init();
 // test for error reporting - only mysqlnd reports errors
 try {
     mysqli_options($link, MYSQLI_SET_CHARSET_NAME, "foobar");
-    if (!$IS_MYSQLND) {
-        print "Unknown character set\n";
-    }
 } catch (mysqli_sql_exception $e) {
     echo $e->getMessage() . "\n";
 }
-
-// invalid options do not generate errors
-mysqli_options($link, -1, "Invalid option");
 
 print "done!";
 ?>
@@ -126,7 +113,7 @@ bool(true)
 %s(19) "MYSQLI_INIT_COMMAND"
 bool(true)
 %s(17) "MYSQLI_CLIENT_SSL"
-bool(false)
+mysqli_options(): Argument #%d ($option) must be MYSQLI_INIT_COMMAND, MYSQLI_SET_CHARSET_NAME, MYSQLI_SERVER_PUBLIC_KEY, or one of the MYSQLI_OPT_* constants
 Link closed
 mysqli object is already closed
 Unknown character set

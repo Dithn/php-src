@@ -1,13 +1,11 @@
 --TEST--
 Test mkdir/rmdir cp932 to UTF-8 path
+--EXTENSIONS--
+iconv
 --SKIPIF--
 <?php
-include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
-
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
-
 ?>
 --CONFLICTS--
 dir_cp932
@@ -21,10 +19,10 @@ dir_cp932
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = iconv('cp932', 'utf-8', "テストマルチバイト・パス"); // cp932 string
-$prefix = create_data("dir_cp932", "${item}42");
-$path = $prefix . DIRECTORY_SEPARATOR . "${item}42";
+$prefix = create_data("dir_cp932", "{$item}42");
+$path = $prefix . DIRECTORY_SEPARATOR . "{$item}42";
 
-$subpath = $path . DIRECTORY_SEPARATOR . "${item}4";
+$subpath = $path . DIRECTORY_SEPARATOR . "{$item}4";
 
 /* The mb dirname exists*/
 var_dump(file_exists($path));

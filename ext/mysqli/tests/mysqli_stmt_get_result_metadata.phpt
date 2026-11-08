@@ -4,20 +4,14 @@ mysqli_stmt_get_result() - meta data
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
-
-if (!function_exists('mysqli_stmt_get_result'))
-    die('skip mysqli_stmt_get_result not available');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require('table.inc');
+    require 'table.inc';
 
-    if (!$stmt = mysqli_stmt_init($link))
-        printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
-
-    if (!mysqli_stmt_prepare($stmt, "SELECT id, label FROM test ORDER BY id ASC LIMIT 3"))
-        printf("[002] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
+    if (!$stmt = mysqli_prepare($link, "SELECT id, label FROM test ORDER BY id ASC LIMIT 3"))
+        printf("[002] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
 
     if (!mysqli_stmt_execute($stmt))
         printf("[003] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
@@ -41,9 +35,10 @@ if (!function_exists('mysqli_stmt_get_result'))
     mysqli_stmt_close($stmt);
 
     // !mysqli_stmt_prepare($stmt, "SELECT id, label, id + 1 as _id,  concat(label, '_') _label FROM test as _test ORDER BY id ASC LIMIT 3") ||
-    if (!($stmt = mysqli_stmt_init($link)) ||
-        !mysqli_stmt_prepare($stmt, "SELECT id , label, id + 1 AS _id, label AS _label, null AS _null, CONCAT(label, '_') _label_concat  FROM test _test ORDER BY id ASC LIMIT 3") ||
-        !mysqli_stmt_execute($stmt))
+    if (!$stmt = mysqli_prepare($link, "SELECT id , label, id + 1 AS _id, label AS _label, null AS _null, CONCAT(label, '_') _label_concat  FROM test _test ORDER BY id ASC LIMIT 3"))
+        printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+
+    if(!mysqli_stmt_execute($stmt))
         printf("[006] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
     if (!is_object($res = mysqli_stmt_get_result($stmt)) || 'mysqli_result' != get_class($res)) {
@@ -227,7 +222,7 @@ if (!function_exists('mysqli_stmt_get_result'))
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECT--
 array(2) {

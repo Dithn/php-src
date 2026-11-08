@@ -4,7 +4,6 @@ Undef to exception for assign dim offset
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --FILE--
 <?php
 set_error_handler(function($_, $m){
@@ -24,15 +23,15 @@ function test3() {
 }
 try {
     test1();
-} catch (Exception $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     test2();
-} catch (Exception $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
-Undefined variable $undef
-Undefined variable $undef
+Exception: Undefined variable $undef
+Exception: Undefined variable $undef

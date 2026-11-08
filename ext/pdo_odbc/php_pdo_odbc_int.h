@@ -1,18 +1,18 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Wez Furlong <wez@php.net>                                    |
   +----------------------------------------------------------------------+
 */
+
+/* internal header; not supposed to be installed */
 
 #ifdef PHP_WIN32
 # define PDO_ODBC_TYPE	"Win32"
@@ -91,10 +91,6 @@
 # include <cli0env.h>
 #endif
 
-#ifdef HAVE_ODBCSDK_H
-# include <odbcsdk.h>
-#endif
-
 /* }}} */
 
 /* {{{ Figure out the type for handles */
@@ -116,7 +112,7 @@
 typedef struct {
 	char last_state[6];
 	char last_err_msg[SQL_MAX_MESSAGE_LENGTH];
-	SDWORD last_error;
+	SQLINTEGER last_error;
 	const char *file, *what;
 	int line;
 } pdo_odbc_errinfo;
@@ -133,7 +129,7 @@ typedef struct {
 	char *data;
 	zend_ulong datalen;
 	SQLLEN fetched_len;
-	SWORD	coltype;
+	SQLSMALLINT coltype;
 	char colname[128];
 	unsigned is_long;
 	unsigned is_unicode:1;
@@ -147,15 +143,22 @@ typedef struct {
 	pdo_odbc_errinfo einfo;
 	char *convbuf;
 	zend_ulong convbufsize;
+	HashTable *out_buffers;
 	unsigned going_long:1;
 	unsigned assume_utf8:1;
+	unsigned params_dirty:1;
 	signed col_count:16;
-	unsigned _spare:14;
+	unsigned _spare:13;
 } pdo_odbc_stmt;
 
 typedef struct {
 	SQLLEN len;
+	SQLLEN outbuflen;
 	SQLSMALLINT paramtype;
+	SQLSMALLINT sqltype;
+	SQLSMALLINT ctype;
+	SQLSMALLINT scale;
+	SQLULEN precision;
 	char *outbuf;
 	unsigned is_unicode:1;
 	unsigned _spare:31;

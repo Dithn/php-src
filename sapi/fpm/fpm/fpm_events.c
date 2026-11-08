@@ -23,7 +23,6 @@
 #include "events/select.h"
 #include "events/poll.h"
 #include "events/epoll.h"
-#include "events/devpoll.h"
 #include "events/port.h"
 #include "events/kqueue.h"
 
@@ -104,6 +103,11 @@ static void fpm_got_signal(struct fpm_event_s *ev, short which, void *arg) /* {{
 				break;
 			case '1' :                  /* SIGUSR1 */
 				zlog(ZLOG_DEBUG, "received SIGUSR1");
+
+				/* fpm_stdio_init_final tied STDERR fd with error_log fd. This affects logging to the
+				 * access.log if it was configured to write to the stderr. Check #8885. */
+				fpm_stdio_restore_original_stderr(0);
+
 				if (0 == fpm_stdio_open_error_log(1)) {
 					zlog(ZLOG_NOTICE, "error log file re-opened");
 				} else {
@@ -117,6 +121,9 @@ static void fpm_got_signal(struct fpm_event_s *ev, short which, void *arg) /* {{
 					zlog(ZLOG_ERROR, "unable to re-opened access log file");
 				}
 				/* else no access log are set */
+
+				/* We need to tie stderr with error_log in the master process after log files reload. Check #8885. */
+				fpm_stdio_redirect_stderr_to_error_log();
 
 				break;
 			case '2' :                  /* SIGUSR2 */
@@ -271,14 +278,6 @@ int fpm_event_pre_init(char *mechanism) /* {{{ */
 		}
 	}
 
-	/* /dev/poll */
-	module = fpm_event_devpoll_module();
-	if (module) {
-		if (!mechanism || strcasecmp(module->name, mechanism) == 0) {
-			return 0;
-		}
-	}
-
 	/* poll */
 	module = fpm_event_poll_module();
 	if (module) {
@@ -304,19 +303,17 @@ int fpm_event_pre_init(char *mechanism) /* {{{ */
 }
 /* }}} */
 
-const char *fpm_event_mechanism_name() /* {{{ */
+const char *fpm_event_mechanism_name(void)
 {
 	return module ? module->name : NULL;
 }
-/* }}} */
 
-int fpm_event_support_edge_trigger() /* {{{ */
+int fpm_event_support_edge_trigger(void)
 {
 	return module ? module->support_edge_trigger : 0;
 }
-/* }}} */
 
-int fpm_event_init_main() /* {{{ */
+int fpm_event_init_main(void)
 {
 	struct fpm_worker_pool_s *wp;
 	int max;
@@ -327,7 +324,7 @@ int fpm_event_init_main() /* {{{ */
 	}
 
 	if (!module->wait) {
-		zlog(ZLOG_ERROR, "Incomplete event implementation. Please open a bug report on https://bugs.php.net.");
+		zlog(ZLOG_ERROR, "Incomplete event implementation. Please open a bug report on https://github.com/php/php-src/issues.");
 		return -1;
 	}
 
@@ -352,7 +349,6 @@ int fpm_event_init_main() /* {{{ */
 	}
 	return 0;
 }
-/* }}} */
 
 void fpm_event_loop(int err) /* {{{ */
 {

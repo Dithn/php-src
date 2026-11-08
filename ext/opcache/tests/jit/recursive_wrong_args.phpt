@@ -4,7 +4,6 @@ Recursive call with too few args
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=32M
 --FILE--
 <?php
 function f($arg) {
@@ -12,9 +11,9 @@ function f($arg) {
 }
 try {
     f();
-} catch (ArgumentCountError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECTF--
-Too few arguments to function f(), 0 passed in %s on line %d and exactly 1 expected
+ArgumentCountError: Too few arguments to function f(), 0 passed in %s on line %d and exactly 1 expected

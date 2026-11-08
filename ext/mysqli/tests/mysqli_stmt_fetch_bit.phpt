@@ -4,16 +4,18 @@ Fetching BIT column values using the PS API
 mysqli
 --SKIPIF--
 <?php
-    require_once('skipifconnectfailure.inc');
-    require_once('connect.inc');
-    require_once('table.inc');
-    if (mysqli_get_server_version($link) < 50003)
-        // b'001' syntax not supported before 5.0.3
-        die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+require_once 'connect.inc';
+if (!$link = @my_mysqli_connect($host, $user, $passwd, $db, $port, $socket)) {
+    die(sprintf("skip Can't connect to MySQL Server - [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
+}
+if (mysqli_get_server_version($link) < 50003) {
+    // b'001' syntax not supported before 5.0.3
+    die("skip Syntax used for test not supported with MySQL Server before 5.0.3");
+}
 ?>
 --FILE--
 <?php
-    require('connect.inc');
+    require 'connect.inc';
 
     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
         printf("[001] Cannot connect to the server using host=%s, user=%s, passwd=***, dbname=%s, port=%s, socket=%s\n",
@@ -27,16 +29,16 @@ mysqli
             !mysqli_query($link, $sql = sprintf('CREATE TABLE test(id INT, label BIT(%d)) ENGINE="%s"', $bits, $engine)))
             printf("[002 - %d] [%d] %s\n",$bits, mysqli_errno($link), mysqli_error($link));
 
-        if (!$stmt = mysqli_stmt_init($link))
-            printf("[003 - %d] [%d] %s\n", $bits, mysqli_errno($link), mysqli_error($link));
-
         while ($tests < min($max_value, 20)) {
             $tests++;
             $value = mt_rand(0, $max_value);
             $sql = sprintf("INSERT INTO test(id, label) VALUES (%d, b'%s')", $value, decbin($value));
 
-            if (!mysqli_stmt_prepare($stmt, $sql) ||
-                    !mysqli_stmt_execute($stmt))
+            unset($stmt); // Unset the variable first, otherwise we would get Out of sync error
+            if (!$stmt = mysqli_prepare($link, $sql))
+                printf("[003 - %d] [%d] %s\n", $bits, mysqli_errno($link), mysqli_error($link));
+
+            if (!mysqli_stmt_execute($stmt))
                 printf("[004 - %d] [%d] %s\n", $bits, mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
             $id = $_label0 = $label = null;
@@ -67,7 +69,7 @@ mysqli
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+require_once 'clean_table.inc';
 ?>
 --EXPECT--
 done!

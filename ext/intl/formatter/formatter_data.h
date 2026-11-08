@@ -1,12 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Stanislav Malyshev <stas@zend.com>                          |
    +----------------------------------------------------------------------+
@@ -17,7 +17,12 @@
 
 #include <php.h>
 
-#include <unicode/unum.h>
+#ifdef __cplusplus
+#include <unicode/numfmt.h>
+using icu::NumberFormat;
+#else
+typedef void NumberFormat;
+#endif
 
 #include "intl_error.h"
 
@@ -26,10 +31,9 @@ typedef struct {
 	intl_error      error;
 
 	// formatter handling
-	UNumberFormat*  unum;
+	NumberFormat*    unum;
 } formatter_data;
 
-formatter_data* formatter_data_create( void );
 void formatter_data_init( formatter_data* nf_data );
 void formatter_data_free( formatter_data* nf_data );
 

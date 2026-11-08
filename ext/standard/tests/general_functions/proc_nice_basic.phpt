@@ -9,6 +9,7 @@ Simone Gentili (sensorario@gmail.com)
 <?php
 if(!function_exists('proc_nice')) die("skip. proc_nice not available ");
 if(substr(strtoupper(PHP_OS), 0, 3) == 'WIN') die('skip. not for Windows');
+if(PHP_OS_FAMILY === 'Solaris') die('skip Solaris has different nice levels');
 exec('ps -p 1 -o "pid,nice"', $output, $exit_code);
 if ($exit_code !== 0) {
     die("skip ps -p is not available");
@@ -19,7 +20,7 @@ if ($exit_code !== 0) {
     function getNice($id)
     {
         $res = shell_exec('ps -p ' . $id .' -o "pid,nice"');
-        preg_match('/^\s*\w+\s+\w+\s*(\d+)\s+(\d+)/m', $res, $matches);
+        preg_match('/^\s*\w+\s+\w+\s*(\d+)\s+(-?\d+)/m', $res, $matches);
         if (count($matches) > 2)
             return $matches[2];
         else
@@ -30,7 +31,9 @@ if ($exit_code !== 0) {
     $niceBefore = getNice($pid);
     proc_nice($delta);
     $niceAfter = getNice($pid);
-    var_dump($niceBefore == ($niceAfter - $delta));
+    // The maximum niceness level is 19, if the process is already running at a high niceness, it cannot be increased.
+    // Decreasing is only possible for superusers.
+    var_dump(min($niceBefore + $delta, 19) == $niceAfter);
 ?>
 --EXPECT--
 bool(true)

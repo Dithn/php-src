@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at                              |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Masaki Fujimoto <fujimoto@php.net>                          |
    |          Rui Hirokawa <hirokawa@php.net>                             |
@@ -19,6 +18,8 @@
 
 #ifndef ZEND_MULTIBYTE_H
 #define ZEND_MULTIBYTE_H
+
+#include "zend_types.h"
 
 typedef struct _zend_encoding zend_encoding;
 
@@ -66,12 +67,12 @@ ZEND_API const char *zend_multibyte_get_encoding_name(const zend_encoding *encod
 ZEND_API int zend_multibyte_check_lexer_compatibility(const zend_encoding *encoding);
 ZEND_API const zend_encoding *zend_multibyte_encoding_detector(const unsigned char *string, size_t length, const zend_encoding **list, size_t list_size);
 ZEND_API size_t zend_multibyte_encoding_converter(unsigned char **to, size_t *to_length, const unsigned char *from, size_t from_length, const zend_encoding *encoding_to, const zend_encoding *encoding_from);
-ZEND_API int zend_multibyte_parse_encoding_list(const char *encoding_list, size_t encoding_list_len, const zend_encoding ***return_list, size_t *return_size, bool persistent);
+ZEND_API zend_result zend_multibyte_parse_encoding_list(const char *encoding_list, size_t encoding_list_len, const zend_encoding ***return_list, size_t *return_size, bool persistent);
 
 ZEND_API const zend_encoding *zend_multibyte_get_internal_encoding(void);
 ZEND_API const zend_encoding *zend_multibyte_get_script_encoding(void);
-ZEND_API int zend_multibyte_set_script_encoding(const zend_encoding **encoding_list, size_t encoding_list_size);
-ZEND_API int zend_multibyte_set_internal_encoding(const zend_encoding *encoding);
+ZEND_API zend_result zend_multibyte_set_script_encoding(const zend_encoding **encoding_list, size_t encoding_list_size);
+ZEND_API zend_result zend_multibyte_set_internal_encoding(const zend_encoding *encoding);
 ZEND_API zend_result zend_multibyte_set_script_encoding_by_string(const char *new_value, size_t new_value_length);
 
 END_EXTERN_C()

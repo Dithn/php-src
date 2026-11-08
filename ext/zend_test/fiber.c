@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Aaron Piotrowski <aaron@trowski.com>                         |
   +----------------------------------------------------------------------+
@@ -91,10 +89,15 @@ static ZEND_STACK_ALIGNED void zend_test_fiber_execute(zend_fiber_transfer *tran
 		execute_data = (zend_execute_data *) stack->top;
 
 		memset(execute_data, 0, sizeof(zend_execute_data));
+		execute_data->func = (zend_function *) &zend_pass_function;
 
 		EG(current_execute_data) = execute_data;
 		EG(jit_trace_num) = 0;
 
+#ifdef ZEND_CHECK_STACK_LIMIT
+		EG(stack_base) = zend_fiber_stack_base(fiber->context.stack);
+		EG(stack_limit) = zend_fiber_stack_limit(fiber->context.stack);
+#endif
 		fiber->fci.retval = &retval;
 
 		zend_call_function(&fiber->fci, &fiber->fci_cache);
@@ -150,7 +153,6 @@ static zend_object *zend_test_fiber_object_create(zend_class_entry *ce)
 	memset(fiber, 0, sizeof(zend_test_fiber));
 
 	zend_object_std_init(&fiber->std, ce);
-	fiber->std.handlers = &zend_test_fiber_handlers;
 
 	return &fiber->std;
 }
@@ -225,7 +227,7 @@ static zend_always_inline void delegate_transfer_result(
 
 static ZEND_METHOD(_ZendTestFiber, __construct)
 {
-	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(getThis());
+	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(ZEND_THIS);
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_FUNC(fiber->fci, fiber->fci_cache)
@@ -237,7 +239,7 @@ static ZEND_METHOD(_ZendTestFiber, __construct)
 
 static ZEND_METHOD(_ZendTestFiber, start)
 {
-	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(getThis());
+	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(ZEND_THIS);
 	zval *params;
 	uint32_t param_count;
 	zend_array *named_params;
@@ -301,7 +303,7 @@ static ZEND_METHOD(_ZendTestFiber, resume)
 		Z_PARAM_ZVAL(value);
 	ZEND_PARSE_PARAMETERS_END();
 
-	fiber = (zend_test_fiber *) Z_OBJ_P(getThis());
+	fiber = (zend_test_fiber *) Z_OBJ_P(ZEND_THIS);
 
 	if (UNEXPECTED(fiber->context.status != ZEND_FIBER_STATUS_SUSPENDED || fiber->caller != NULL)) {
 		zend_throw_error(NULL, "Cannot resume a fiber that is not suspended");
@@ -322,7 +324,7 @@ static ZEND_METHOD(_ZendTestFiber, pipeTo)
 		Z_PARAM_FUNC(fci, fci_cache)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(getThis());
+	zend_test_fiber *fiber = (zend_test_fiber *) Z_OBJ_P(ZEND_THIS);
 	zend_test_fiber *target = (zend_test_fiber *) zend_test_fiber_class->create_object(zend_test_fiber_class);
 
 	target->fci = fci;
@@ -344,8 +346,10 @@ void zend_test_fiber_init(void)
 {
 	zend_test_fiber_class = register_class__ZendTestFiber();
 	zend_test_fiber_class->create_object = zend_test_fiber_object_create;
+	zend_test_fiber_class->default_object_handlers = &zend_test_fiber_handlers;
 
 	zend_test_fiber_handlers = std_object_handlers;
 	zend_test_fiber_handlers.dtor_obj = zend_test_fiber_object_destroy;
 	zend_test_fiber_handlers.free_obj = zend_test_fiber_object_free;
+	zend_test_fiber_handlers.clone_obj = NULL;
 }

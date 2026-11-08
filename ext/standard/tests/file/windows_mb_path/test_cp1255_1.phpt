@@ -4,9 +4,8 @@ Test mkdir/rmdir cp1255 path
 <?php
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
 skip_if_wrong_cp(1255, "ansi");
 
 ?>
@@ -24,10 +23,10 @@ default_charset=cp1255
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = "כללים מרובים";
-$prefix = create_data("dir_cp1255", "${item}42", 1255);
-$path = $prefix . DIRECTORY_SEPARATOR . "${item}42";
+$prefix = create_data("dir_cp1255", "{$item}42", 1255);
+$path = $prefix . DIRECTORY_SEPARATOR . "{$item}42";
 
-$subpath = $path . DIRECTORY_SEPARATOR . "${item}4";
+$subpath = $path . DIRECTORY_SEPARATOR . "{$item}4";
 
 /* The mb dirname exists*/
 var_dump(file_exists($path));

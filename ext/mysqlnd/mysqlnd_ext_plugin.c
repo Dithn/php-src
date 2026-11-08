@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Johannes Schlüter <johannes@php.net>                        |
@@ -74,7 +72,7 @@ mysqlnd_plugin__get_plugin_result_data(const MYSQLND_RES * result, const unsigne
 static void **
 mysqlnd_plugin__get_plugin_result_unbuffered_data(const MYSQLND_RES_UNBUFFERED * result, const unsigned int plugin_id)
 {
-	DBG_ENTER("mysqlnd_plugin__get_plugin_result_data");
+	DBG_ENTER("mysqlnd_plugin__get_plugin_result_unbuffered_data");
 	DBG_INF_FMT("plugin_id=%u", plugin_id);
 	if (!result || plugin_id >= mysqlnd_plugin_count()) {
 		return NULL;
@@ -87,7 +85,7 @@ mysqlnd_plugin__get_plugin_result_unbuffered_data(const MYSQLND_RES_UNBUFFERED *
 static void **
 mysqlnd_plugin__get_plugin_result_buffered_data(const MYSQLND_RES_BUFFERED * result, const unsigned int plugin_id)
 {
-	DBG_ENTER("mysqlnd_plugin__get_plugin_result_data");
+	DBG_ENTER("mysqlnd_plugin__get_plugin_result_buffered_data");
 	DBG_INF_FMT("plugin_id=%u", plugin_id);
 	if (!result || plugin_id >= mysqlnd_plugin_count()) {
 		return NULL;

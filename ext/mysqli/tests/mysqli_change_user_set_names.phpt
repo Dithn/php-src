@@ -4,26 +4,11 @@ mysqli_change_user() - SET NAMES
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
-
-if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
-    die(sprintf("skip [%d] %s", mysqli_connect_errno(), mysqli_connect_error()));
-
-if (!$res = mysqli_query($link, 'SELECT version() AS server_version'))
-    die(sprintf("skip [%d] %s\n", mysqli_errno($link), mysqli_error($link)));
-
-$tmp = mysqli_fetch_assoc($res);
-mysqli_free_result($res);
-$version = explode('.', $tmp['server_version']);
-if (empty($version))
-    die(sprintf("skip Cannot determine server version, we need MySQL Server 4.1+ for the test!"));
-
-if ($version[0] <= 4 && $version[1] < 1)
-    die(sprintf("skip We need MySQL Server 4.1+ for the test!"));
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once('connect.inc');
+    require_once 'connect.inc';
 
     if (!$link = my_mysqli_connect($host, $user, $passwd, $db, $port, $socket))
         printf("[001] [%d] %s\n", mysqli_connect_errno(), mysqli_connect_error());
@@ -140,11 +125,12 @@ if ($version[0] <= 4 && $version[1] < 1)
     if (!is_object($charset = mysqli_get_charset($link)))
         printf("[013] Expecting object/std_class, got %s/%s\n", gettype($charset), $charset);
 
-    if ($charset->charset != $defaults['charset_connection'])
+    if ($charset->charset != $defaults['charset_connection'] || $link->character_set_name() != $defaults['charset_connection'])
         printf("[014] Expecting connection charset to be %s got %s\n",
             $defaults['charset_connection'],
             $charset->charset);
 
+    // Remove the following test when removing mysqli_get_charset() in PHP 9.0.0
     if ($charset->collation != $defaults['collation_connection'])
         printf("[015] Expecting collation to be %s got %s\n",
             $defaults['collation_connection'],
@@ -153,5 +139,6 @@ if ($version[0] <= 4 && $version[1] < 1)
     mysqli_close($link);
     print "done!";
 ?>
---EXPECT--
+--EXPECTF--
+Deprecated: Function mysqli_get_charset() is deprecated since 8.6, did you mean mysqli_character_set_name()? in %s on line %d
 done!

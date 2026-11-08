@@ -2,20 +2,24 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Wez Furlong <wez@thebrainroom.com>                           |
    |         Marcus Boerger <helly@php.net>                               |
    +----------------------------------------------------------------------+
 */
+
+#ifndef ZEND_ITERATORS_H
+#define ZEND_ITERATORS_H
+
+#include "zend_types.h"
 
 /* These iterators were designed to operate within the foreach()
  * structures provided by the engine, but could be extended for use
@@ -31,7 +35,7 @@ typedef struct _zend_object_iterator_funcs {
 	void (*dtor)(zend_object_iterator *iter);
 
 	/* check for end of iteration (FAILURE or SUCCESS if data is valid) */
-	int (*valid)(zend_object_iterator *iter);
+	zend_result (*valid)(zend_object_iterator *iter);
 
 	/* fetch the item data for the current element */
 	zval *(*get_current_data)(zend_object_iterator *iter);
@@ -72,6 +76,13 @@ typedef struct _zend_class_iterator_funcs {
 	zend_function *zf_rewind;
 } zend_class_iterator_funcs;
 
+typedef struct _zend_class_arrayaccess_funcs {
+	zend_function *zf_offsetget;
+	zend_function *zf_offsetexists;
+	zend_function *zf_offsetset;
+	zend_function *zf_offsetunset;
+} zend_class_arrayaccess_funcs;
+
 BEGIN_EXTERN_C()
 /* given a zval, returns stuff that can be used to iterate it. */
 ZEND_API zend_object_iterator* zend_iterator_unwrap(zval *array_ptr);
@@ -82,3 +93,5 @@ ZEND_API void zend_iterator_dtor(zend_object_iterator *iter);
 
 ZEND_API void zend_register_iterator_wrapper(void);
 END_EXTERN_C()
+
+#endif /* ZEND_ITERATORS_H */

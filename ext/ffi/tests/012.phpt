@@ -7,9 +7,9 @@ ffi.enable=1
 --FILE--
 <?php
 try {
-    var_dump(serialize(FFI::new("int[2]")));
+    var_dump(serialize(FFI::cdef()->new("int[2]")));
 } catch (Throwable $e) {
-    echo get_class($e) . ": " . $e->getMessage()."\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--

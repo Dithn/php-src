@@ -1,0 +1,47 @@
+--TEST--
+ParentNode hierarchy exceptions with temporary and non-temporary text nodes
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+
+$dom = Dom\HTMLDocument::createEmpty();
+
+try {
+    $dom->append("bar");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    $dom->append($dom->createTextNode("bar"));
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+$text = $dom->createTextNode("bar");
+try {
+    $dom->append($text);
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+var_dump($text->parentNode);
+var_dump($text->textContent);
+
+$element = $dom->createElement("container");
+$text = $element->appendChild($dom->createTextNode("text"));
+try {
+    $dom->append($text);
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+?>
+--EXPECT--
+DOMException: Cannot insert text as a child of a document
+DOMException: Cannot insert text as a child of a document
+DOMException: Cannot insert text as a child of a document
+NULL
+string(3) "bar"
+DOMException: Cannot insert text as a child of a document

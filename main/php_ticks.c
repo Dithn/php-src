@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Stig Bakken <ssb@php.net>                                    |
    +----------------------------------------------------------------------+
@@ -23,10 +21,9 @@ struct st_tick_function
 	void *arg;
 };
 
-int php_startup_ticks(void)
+void php_startup_ticks(void)
 {
 	zend_llist_init(&PG(tick_functions), sizeof(struct st_tick_function), NULL, 1);
-	return SUCCESS;
 }
 
 void php_deactivate_ticks(void)
@@ -34,9 +31,9 @@ void php_deactivate_ticks(void)
 	zend_llist_clean(&PG(tick_functions));
 }
 
-void php_shutdown_ticks(void)
+void php_shutdown_ticks(php_core_globals *core_globals)
 {
-	zend_llist_destroy(&PG(tick_functions));
+	zend_llist_destroy(&core_globals->tick_functions);
 }
 
 static int php_compare_tick_functions(void *elem1, void *elem2)

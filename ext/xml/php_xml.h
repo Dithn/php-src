@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Stig Sæther Bakken <ssb@php.net>                            |
    |          Thies C. Arntzen <thies@thieso.net>                         |
@@ -38,5 +36,19 @@ extern zend_module_entry xml_module_entry;
 #endif /* HAVE_XML */
 
 #define phpext_xml_ptr xml_module_ptr
+
+enum php_xml_option {
+	PHP_XML_OPTION_CASE_FOLDING = 1,
+	PHP_XML_OPTION_TARGET_ENCODING,
+	PHP_XML_OPTION_SKIP_TAGSTART,
+	PHP_XML_OPTION_SKIP_WHITE,
+	PHP_XML_OPTION_PARSE_HUGE,
+};
+
+#ifdef LIBXML_EXPAT_COMPAT
+#define PHP_XML_SAX_IMPL "libxml"
+#else
+#define PHP_XML_SAX_IMPL "expat"
+#endif
 
 #endif /* PHP_XML_H */

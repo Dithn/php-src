@@ -4,7 +4,6 @@ JIT ASSIGN_OBJ: Assign property on null
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --EXTENSIONS--
 opcache
 --FILE--
@@ -18,17 +17,17 @@ function test2($o) {
 
 try {
     test1(null);
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 try {
     test2(null);
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 ?>
 --EXPECT--
-Attempt to assign property "x" on null
-Attempt to assign property "x" on null
+Error: Attempt to assign property "x" on null
+Error: Attempt to assign property "x" on null

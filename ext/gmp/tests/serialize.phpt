@@ -18,27 +18,27 @@ var_dump(unserialize('C:3:"GMP":15:{s:2:"42";a:0:{}}'));
 
 try {
     unserialize('C:3:"GMP":0:{}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 try {
     unserialize('C:3:"GMP":9:{s:2:"42";}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 try {
     unserialize('O:3:"GMP":0:{}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 try {
     unserialize('O:3:"GMP":1:{i:0;i:0;}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 try {
     unserialize('O:3:"GMP":1:{i:0;s:0:"";}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 try {
     unserialize('O:3:"GMP":2:{i:0;s:1:"0";i:1;i:0;}');
-} catch (Exception $e) { var_dump($e->getMessage()); }
+} catch (Exception $e) { echo $e::class, ': ', $e->getMessage(), "\n"; }
 
 ?>
 --EXPECTF--
@@ -54,6 +54,8 @@ object(GMP)#%d (1) {
 
 Deprecated: Creation of dynamic property GMP::$foo is deprecated in %s on line %d
 string(56) "O:3:"GMP":2:{i:0;s:1:"d";i:1;a:1:{s:3:"foo";s:3:"bar";}}"
+
+Deprecated: Creation of dynamic property GMP::$foo is deprecated in %s on line %d
 object(GMP)#%d (2) {
   ["foo"]=>
   string(3) "bar"
@@ -64,9 +66,9 @@ object(GMP)#1 (1) {
   ["num"]=>
   string(2) "42"
 }
-string(28) "Could not unserialize number"
-string(32) "Could not unserialize properties"
-string(28) "Could not unserialize number"
-string(28) "Could not unserialize number"
-string(28) "Could not unserialize number"
-string(32) "Could not unserialize properties"
+Exception: Could not unserialize number
+Exception: Could not unserialize properties
+Exception: Could not unserialize number
+Exception: Could not unserialize number
+Exception: Could not unserialize number
+Exception: Could not unserialize properties

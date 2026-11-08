@@ -1,16 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
 */
 
@@ -34,7 +30,7 @@
 #include <locale.h>
 #ifdef ZTS
 #include "ext/standard/php_string.h"
-#define LCONV_DECIMAL_POINT (*lconv.decimal_point)
+#define LCONV_DECIMAL_POINT localeconv_decimal_point()
 #else
 #define LCONV_DECIMAL_POINT (*lconv->decimal_point)
 #endif
@@ -288,7 +284,7 @@ PHPAPI char * php_conv_fp(char format, double num,
 	/*
 	 * Check for Infinity and NaN
 	 */
-	if (isalpha((int)*p)) {
+	if (isalpha((unsigned char)*p)) {
 		*len = strlen(p);
 		memcpy(buf, p, *len + 1);
 		*is_negative = false;
@@ -421,7 +417,7 @@ typedef struct buf_area buffy;
  *      bep points to the end-of-buffer+1
  * While using this macro, note that the nextb pointer is NOT updated.
  *
- * NOTE: Evaluation of the c argument should not have any side-effects
+ * NOTE: Evaluation of the c argument should not have any side effects
  */
 #define INS_CHAR(c, sp, bep, cc) \
 	{                            \
@@ -435,11 +431,11 @@ typedef struct buf_area buffy;
 #define NUM( c )			( c - '0' )
 
 #define STR_TO_DEC( str, num )		\
-    num = NUM( *str++ ) ;		\
-    while ( isdigit((int)*str ) )		\
+    num = NUM( *(str)++ ) ;		\
+    while ( isdigit((unsigned char)*(str) ) )		\
     {					\
 	num *= 10 ;			\
-	num += NUM( *str++ ) ;		\
+	num += NUM( *(str)++ ) ;		\
     }
 
 /*
@@ -495,9 +491,7 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 	char num_buf[NUM_BUF_SIZE];
 	char char_buf[2];			/* for printing %% and %<unknown> */
 
-#ifdef ZTS
-	struct lconv lconv;
-#else
+#ifndef ZTS
 	struct lconv *lconv = NULL;
 #endif
 
@@ -533,7 +527,7 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 			/*
 			 * Try to avoid checking for flags, width or precision
 			 */
-			if (isascii((int)*fmt) && !islower((int)*fmt)) {
+			if (isascii((unsigned char)*fmt) && !islower((unsigned char)*fmt)) {
 				/*
 				 * Recognize flags: -, #, BLANK, +
 				 */
@@ -555,7 +549,7 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 				/*
 				 * Check if a width was specified
 				 */
-				if (isdigit((int)*fmt)) {
+				if (isdigit((unsigned char)*fmt)) {
 					STR_TO_DEC(fmt, min_width);
 					adjust_width = true;
 				} else if (*fmt == '*') {
@@ -575,13 +569,13 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 				if (*fmt == '.') {
 					adjust_precision = true;
 					fmt++;
-					if (isdigit((int)*fmt)) {
+					if (isdigit((unsigned char)*fmt)) {
 						STR_TO_DEC(fmt, precision);
 					} else if (*fmt == '*') {
 						precision = va_arg(ap, int);
 						fmt++;
-						if (precision < 0)
-							precision = 0;
+						if (precision < -1)
+							precision = -1;
 					} else
 						precision = 0;
 				} else
@@ -613,19 +607,11 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 					break;
 				case 'j':
 					fmt++;
-#if SIZEOF_INTMAX_T
 					modifier = LM_INTMAX_T;
-#else
-					modifier = LM_SIZE_T;
-#endif
 					break;
 				case 't':
 					fmt++;
-#if SIZEOF_PTRDIFF_T
 					modifier = LM_PTRDIFF_T;
-#else
-					modifier = LM_SIZE_T;
-#endif
 					break;
 				case 'p':
 				{
@@ -689,16 +675,12 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 							i_num = (int64_t) va_arg(ap, unsigned long long int);
 							break;
 #endif
-#if SIZEOF_INTMAX_T
 						case LM_INTMAX_T:
 							i_num = (int64_t) va_arg(ap, uintmax_t);
 							break;
-#endif
-#if SIZEOF_PTRDIFF_T
 						case LM_PTRDIFF_T:
 							i_num = (int64_t) va_arg(ap, ptrdiff_t);
 							break;
-#endif
 					}
 					/*
 					 * The rest also applies to other integer formats, so fall
@@ -721,27 +703,19 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 								i_num = (int64_t) va_arg(ap, long int);
 								break;
 							case LM_SIZE_T:
-#if SIZEOF_SSIZE_T
 								i_num = (int64_t) va_arg(ap, ssize_t);
-#else
-								i_num = (int64_t) va_arg(ap, size_t);
-#endif
 								break;
 #if SIZEOF_LONG_LONG
 							case LM_LONG_LONG:
 								i_num = (int64_t) va_arg(ap, long long int);
 								break;
 #endif
-#if SIZEOF_INTMAX_T
 							case LM_INTMAX_T:
 								i_num = (int64_t) va_arg(ap, intmax_t);
 								break;
-#endif
-#if SIZEOF_PTRDIFF_T
 							case LM_PTRDIFF_T:
 								i_num = (int64_t) va_arg(ap, ptrdiff_t);
 								break;
-#endif
 						}
 					}
 					s = ap_php_conv_10(i_num, (*fmt) == 'u', &is_negative,
@@ -778,16 +752,12 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 							ui_num = (uint64_t) va_arg(ap, unsigned long long int);
 							break;
 #endif
-#if SIZEOF_INTMAX_T
 						case LM_INTMAX_T:
 							ui_num = (uint64_t) va_arg(ap, uintmax_t);
 							break;
-#endif
-#if SIZEOF_PTRDIFF_T
 						case LM_PTRDIFF_T:
 							ui_num = (uint64_t) va_arg(ap, ptrdiff_t);
 							break;
-#endif
 					}
 					s = ap_php_conv_p2(ui_num, 3, *fmt, &num_buf[NUM_BUF_SIZE], &s_len);
 					FIX_PRECISION(adjust_precision, precision, s, s_len);
@@ -817,20 +787,16 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 							ui_num = (uint64_t) va_arg(ap, unsigned long long int);
 							break;
 #endif
-#if SIZEOF_INTMAX_T
 						case LM_INTMAX_T:
 							ui_num = (uint64_t) va_arg(ap, uintmax_t);
 							break;
-#endif
-#if SIZEOF_PTRDIFF_T
 						case LM_PTRDIFF_T:
 							ui_num = (uint64_t) va_arg(ap, ptrdiff_t);
 							break;
-#endif
 					}
 					s = ap_php_conv_p2(ui_num, 4, *fmt, &num_buf[NUM_BUF_SIZE], &s_len);
 					FIX_PRECISION(adjust_precision, precision, s, s_len);
-					if (alternate_form && i_num != 0) {
+					if (alternate_form && ui_num != 0) {
 						*--s = *fmt;	/* 'x' or 'X' */
 						*--s = '0';
 						s_len += 2;
@@ -875,9 +841,7 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 						s = "INF";
 						s_len = 3;
 					} else {
-#ifdef ZTS
-						localeconv_r(&lconv);
-#else
+#ifndef ZTS
 						if (!lconv) {
 							lconv = localeconv();
 						}
@@ -934,9 +898,7 @@ static size_t format_converter(buffy * odp, const char *fmt, va_list ap) /* {{{ 
 					/*
 					 * * We use &num_buf[ 1 ], so that we have room for the sign
 					 */
-#ifdef ZTS
-					localeconv_r(&lconv);
-#else
+#ifndef ZTS
 					if (!lconv) {
 						lconv = localeconv();
 					}

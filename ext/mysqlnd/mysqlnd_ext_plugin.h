@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Johannes Schlüter <johannes@php.net>                        |
@@ -42,7 +40,7 @@ PHPAPI extern struct st_mysqlnd_plugin__plugin_area_getters mysqlnd_plugin_area_
 #define mysqlnd_plugin_get_plugin_stmt_data(stmt, p_id)					mysqlnd_plugin_area_getters.get_stmt_area((stmt), (p_id))
 #define mysqlnd_plugin_get_plugin_protocol_data(proto, p_id)			mysqlnd_plugin_area_getters.get_protocol_decoder_area((proto), (p_id))
 #define mysqlnd_plugin_get_plugin_pfc_data(pfc, p_id)					mysqlnd_plugin_area_getters.get_pfc_area((pfc), (p_id))
-#define mysqlnd_plugin_get_plugin_vio_data(vio, p_id)					mysqlnd_plugin_area_getters.get_pfc_area((vio), (p_id))
+#define mysqlnd_plugin_get_plugin_vio_data(vio, p_id)					mysqlnd_plugin_area_getters.get_vio_area((vio), (p_id))
 
 
 struct st_mysqlnd_plugin_methods_xetters

@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Ulf Wendel <uw@php.net>                                     |
@@ -44,6 +42,8 @@
 #else
 #define MYSQLND_DBG_ENABLED 0
 #endif
+
+#define MYSQLND_CHARSETS_SANITY_CHECK 0
 
 #ifdef ZTS
 #include "TSRM.h"
@@ -194,7 +194,6 @@ PHPAPI void mysqlnd_local_infile_default(MYSQLND_CONN_DATA * conn);
 #define mysqlnd_ping(conn)					((conn)->data)->m->ping((conn)->data)
 #define mysqlnd_kill(conn, pid)				((conn)->data)->m->kill_connection((conn)->data, (pid))
 #define mysqlnd_refresh(conn, options)		((conn)->data)->m->refresh_server((conn)->data, (options))
-#define mysqlnd_shutdown(conn, level)		((conn)->data)->m->shutdown_server((conn)->data, (level))
 #define mysqlnd_set_character_set(conn, cs)	((conn)->data)->m->set_charset((conn)->data, (cs))
 #define mysqlnd_stat(conn, msg)				((conn)->data)->m->get_server_statistics(((conn)->data), (msg))
 #define mysqlnd_options(conn, opt, value)	((conn)->data)->m->set_client_option((conn)->data, (opt), (value))

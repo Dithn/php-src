@@ -4,22 +4,18 @@ mysqli_fetch_field()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once("connect.inc");
-
     // Note: no SQL type tests, internally the same function gets used as for mysqli_fetch_array() which does a lot of SQL type test
 
-    require('table.inc');
+    require 'table.inc';
 
     // Make sure that client, connection and result charsets are all the
     // same. Not sure whether this is strictly necessary.
     if (!mysqli_set_charset($link, 'utf8'))
-        printf("[%d] %s\n", mysqli_errno($link), mysqli_errno($link));
-
-    $charsetInfo = mysqli_get_charset($link);
+        printf("[%d] %s\n", mysqli_errno($link), mysqli_error($link));
 
     if (!$res = mysqli_query($link, "SELECT id AS ID, label FROM test AS TEST ORDER BY id LIMIT 1")) {
         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
@@ -32,10 +28,6 @@ require_once('skipifconnectfailure.inc');
     /* label column, result set charset */
     $tmp = mysqli_fetch_field($res);
     var_dump($tmp);
-    if ($tmp->charsetnr != $charsetInfo->number) {
-        printf("[004] Expecting charset %s/%d got %d\n",
-            $charsetInfo->charset, $charsetInfo->number, $tmp->charsetnr);
-    }
     if ($tmp->db != $db) {
         printf("011] Expecting database '%s' got '%s'\n",
             $db, $tmp->db);
@@ -75,7 +67,7 @@ require_once('skipifconnectfailure.inc');
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECTF--
 object(stdClass)#%d (13) {

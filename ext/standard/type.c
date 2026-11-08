@@ -1,21 +1,19 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Rasmus Lerdorf <rasmus@php.net>                              |
    +----------------------------------------------------------------------+
 */
 
 #include "php.h"
-#include "php_incomplete_class.h"
+#include "zend_interfaces.h"
 
 /* {{{ Returns the type of the variable */
 PHP_FUNCTION(gettype)
@@ -100,31 +98,28 @@ PHP_FUNCTION(settype)
 	} else {
 		ptr = Z_REFVAL_P(var);
 	}
-	if (zend_string_equals_literal_ci(type, "integer")) {
+	if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_INTEGER))
+			|| zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_INT))) {
 		convert_to_long(ptr);
-	} else if (zend_string_equals_literal_ci(type, "int")) {
-		convert_to_long(ptr);
-	} else if (zend_string_equals_literal_ci(type, "float")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_FLOAT))
+			|| zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_DOUBLE))) {
 		convert_to_double(ptr);
-	} else if (zend_string_equals_literal_ci(type, "double")) { /* deprecated */
-		convert_to_double(ptr);
-	} else if (zend_string_equals_literal_ci(type, "string")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_STRING))) {
 		convert_to_string(ptr);
-	} else if (zend_string_equals_literal_ci(type, "array")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_ARRAY))) {
 		convert_to_array(ptr);
-	} else if (zend_string_equals_literal_ci(type, "object")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_OBJECT))) {
 		convert_to_object(ptr);
-	} else if (zend_string_equals_literal_ci(type, "bool")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_BOOL))
+			|| zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_BOOLEAN))) {
 		convert_to_boolean(ptr);
-	} else if (zend_string_equals_literal_ci(type, "boolean")) {
-		convert_to_boolean(ptr);
-	} else if (zend_string_equals_literal_ci(type, "null")) {
+	} else if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_NULL_LOWERCASE))) {
 		convert_to_null(ptr);
 	} else {
 		if (ptr == &tmp) {
 			zval_ptr_dtor(&tmp);
 		}
-		if (zend_string_equals_literal_ci(type, "resource")) {
+		if (zend_string_equals_ci(type, ZSTR_KNOWN(ZEND_STR_RESOURCE))) {
 			zend_value_error("Cannot convert to resource type");
 		} else {
 			zend_argument_value_error(2, "must be a valid type");
@@ -152,8 +147,7 @@ PHP_FUNCTION(intval)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (Z_TYPE_P(num) != IS_STRING || base == 10) {
-		RETVAL_LONG(zval_get_long(num));
-		return;
+		RETURN_LONG(zval_get_long(num));
 	}
 
 
@@ -161,7 +155,7 @@ PHP_FUNCTION(intval)
 		char *strval = Z_STRVAL_P(num);
 		size_t strlen = Z_STRLEN_P(num);
 
-		while (isspace(*strval) && strlen) {
+		while (isspace((unsigned char)*strval) && strlen) {
 			strval++;
 			strlen--;
 		}
@@ -174,14 +168,17 @@ PHP_FUNCTION(intval)
 			}
 
 			if (strval[offset] == '0' && (strval[offset + 1] == 'b' || strval[offset + 1] == 'B')) {
+				if (strval[0] != '-') {
+					/* Either "+0b", or "0b" */
+					RETURN_LONG(ZEND_STRTOL(strval + 2 + offset, NULL, 2));
+				}
+
 				char *tmpval;
 				strlen -= 2; /* Removing "0b" */
 				tmpval = emalloc(strlen + 1);
 
-				/* Place the unary symbol at pos 0 if there was one */
-				if (offset) {
-					tmpval[0] = strval[0];
-				}
+				/* Place the unary symbol at pos 0 */
+				tmpval[0] = '-';
 
 				/* Copy the data from after "0b" to the end of the buffer */
 				memcpy(tmpval + offset, strval + offset + 2, strlen - offset);
@@ -342,20 +339,12 @@ PHP_FUNCTION(is_object)
 }
 /* }}} */
 
-/* {{{ Returns true if value is a number or a numeric string */
-PHP_FUNCTION(is_numeric)
+static zend_always_inline void _zend_is_numeric(zval *return_value, zval *arg)
 {
-	zval *arg;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(arg)
-	ZEND_PARSE_PARAMETERS_END();
-
 	switch (Z_TYPE_P(arg)) {
 		case IS_LONG:
 		case IS_DOUBLE:
 			RETURN_TRUE;
-			break;
 
 		case IS_STRING:
 			if (is_numeric_string(Z_STRVAL_P(arg), Z_STRLEN_P(arg), NULL, NULL, 0)) {
@@ -367,10 +356,30 @@ PHP_FUNCTION(is_numeric)
 
 		default:
 			RETURN_FALSE;
-			break;
 	}
 }
+
+/* {{{ Returns true if value is a number or a numeric string */
+PHP_FUNCTION(is_numeric)
+{
+	zval *arg;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	_zend_is_numeric(return_value, arg);
+}
 /* }}} */
+
+ZEND_FRAMELESS_FUNCTION(is_numeric, 1)
+{
+	zval *arg;
+
+	Z_FLF_PARAM_ZVAL(1, arg);
+
+	_zend_is_numeric(return_value, arg);
+}
 
 /* {{{ Returns true if value is a scalar */
 PHP_FUNCTION(is_scalar)
@@ -388,11 +397,9 @@ PHP_FUNCTION(is_scalar)
 		case IS_LONG:
 		case IS_STRING:
 			RETURN_TRUE;
-			break;
 
 		default:
 			RETURN_FALSE;
-			break;
 	}
 }
 /* }}} */
@@ -449,6 +456,18 @@ PHP_FUNCTION(is_countable)
 		Z_PARAM_ZVAL(var)
 	ZEND_PARSE_PARAMETERS_END();
 
-	RETURN_BOOL(zend_is_countable(var));
+
+	switch (Z_TYPE_P(var)) {
+		case IS_ARRAY:
+			RETURN_TRUE;
+		case IS_OBJECT:
+			if (Z_OBJ_HT_P(var)->count_elements) {
+				RETURN_TRUE;
+			}
+
+			RETURN_BOOL(zend_class_implements_interface(Z_OBJCE_P(var), zend_ce_countable));
+		default:
+			RETURN_FALSE;
+	}
 }
 /* }}} */

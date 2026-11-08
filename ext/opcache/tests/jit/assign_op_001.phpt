@@ -4,7 +4,6 @@ JIT ASSIGN_OP: 001
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --FILE--
 <?php
 function test1($a) {
@@ -15,15 +14,15 @@ function test2($a) {
 }
 try {
     test1(1);
-} catch (DivisionByZeroError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     test2(1);
-} catch (ArithmeticError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
-Modulo by zero
-Bit shift by negative number
+DivisionByZeroError: Modulo by zero
+ArithmeticError: Bit shift by negative number

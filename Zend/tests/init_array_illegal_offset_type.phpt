@@ -7,9 +7,9 @@ function test() {
 }
 try {
     test();
-} catch (TypeError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
-Illegal offset type
+TypeError: Cannot access offset of type stdClass on array

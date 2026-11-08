@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Marcus Boerger <helly@php.net>                               |
    +----------------------------------------------------------------------+
@@ -49,7 +47,7 @@ int inifile_delete_ex(inifile *dba, const key_type *key, bool *found);
 int inifile_replace(inifile *dba, const key_type *key, const val_type *val);
 int inifile_replace_ex(inifile *dba, const key_type *key, const val_type *val, bool *found);
 int inifile_append(inifile *dba, const key_type *key, const val_type *val);
-char *inifile_version(void);
+const char *inifile_version(void);
 
 key_type inifile_key_split(const char *group_name);
 char * inifile_key_string(const key_type *key);

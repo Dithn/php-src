@@ -1,0 +1,28 @@
+--TEST--
+Document::append() with text nodes in an invalid hierarchy
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+
+$dom = Dom\HTMLDocument::createEmpty();
+
+try {
+    $dom->append("foo", "bar", "baz", $dom);
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+try {
+    $dom->append("foo", "bar", "baz");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+var_dump($dom->saveHtml());
+
+?>
+--EXPECT--
+DOMException: Hierarchy Request Error
+DOMException: Cannot insert text as a child of a document
+string(0) ""

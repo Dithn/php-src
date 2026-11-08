@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Marcus Boerger <helly@php.net>                              |
    +----------------------------------------------------------------------+
@@ -18,7 +16,6 @@
 #define SPL_DIRECTORY_H
 
 #include "php.h"
-#include "php_spl.h"
 
 extern PHPAPI zend_class_entry *spl_ce_SplFileInfo;
 extern PHPAPI zend_class_entry *spl_ce_DirectoryIterator;
@@ -30,30 +27,24 @@ extern PHPAPI zend_class_entry *spl_ce_SplTempFileObject;
 
 PHP_MINIT_FUNCTION(spl_directory);
 
-typedef enum {
-	SPL_FS_INFO, /* must be 0 */
-	SPL_FS_DIR,
-	SPL_FS_FILE
-} SPL_FS_OBJ_TYPE;
-
+/* Internal objecte structure and helpers for Directory and File SPL objects */
 typedef struct _spl_filesystem_object  spl_filesystem_object;
 
 typedef void (*spl_foreign_dtor_t)(spl_filesystem_object *object);
 typedef void (*spl_foreign_clone_t)(spl_filesystem_object *src, spl_filesystem_object *dst);
 
-PHPAPI char* spl_filesystem_object_get_path(spl_filesystem_object *intern, size_t *len);
+PHPAPI zend_string *spl_filesystem_object_get_path(const spl_filesystem_object *intern);
 
 typedef struct _spl_other_handler {
 	spl_foreign_dtor_t     dtor;
 	spl_foreign_clone_t    clone;
 } spl_other_handler;
 
-/* define an overloaded iterator structure */
-typedef struct {
-	zend_object_iterator  intern;
-	zval                  current;
-	void                 *object;
-} spl_filesystem_iterator;
+typedef enum {
+	SPL_FS_INFO, /* must be 0 */
+	SPL_FS_DIR,
+	SPL_FS_FILE
+} SPL_FS_OBJ_TYPE;
 
 struct _spl_filesystem_object {
 	void               *oth;
@@ -69,8 +60,7 @@ struct _spl_filesystem_object {
 		struct {
 			php_stream         *dirp;
 			zend_string        *sub_path;
-			int                index;
-			int                is_recursive;
+			zend_long          index;
 			zend_function      *func_rewind;
 			zend_function      *func_next;
 			zend_function      *func_valid;
@@ -82,8 +72,7 @@ struct _spl_filesystem_object {
 			zval               *zcontext;
 			zend_string        *open_mode;
 			zval               current_zval;
-			char               *current_line;
-			size_t             current_line_len;
+			zend_string       *current_line;
 			size_t             max_line_len;
 			zend_long               current_line_num;
 			zval               zresource;
@@ -91,32 +80,11 @@ struct _spl_filesystem_object {
 			char               delimiter;
 			char               enclosure;
 			int                escape;
+			bool               is_escape_default;
 		} file;
 	} u;
 	zend_object        std;
 };
-
-static inline spl_filesystem_object *spl_filesystem_from_obj(zend_object *obj) /* {{{ */ {
-	return (spl_filesystem_object*)((char*)(obj) - XtOffsetOf(spl_filesystem_object, std));
-}
-/* }}} */
-
-#define Z_SPLFILESYSTEM_P(zv)  spl_filesystem_from_obj(Z_OBJ_P((zv)))
-
-static inline spl_filesystem_iterator* spl_filesystem_object_to_iterator(spl_filesystem_object *obj)
-{
-	spl_filesystem_iterator    *it;
-
-	it = ecalloc(1, sizeof(spl_filesystem_iterator));
-	it->object = (void *)obj;
-	zend_iterator_init(&it->intern);
-	return it;
-}
-
-static inline spl_filesystem_object* spl_filesystem_iterator_to_object(spl_filesystem_iterator *it)
-{
-	return (spl_filesystem_object*)it->object;
-}
 
 #define SPL_FILE_OBJECT_DROP_NEW_LINE      0x00000001 /* drop new lines */
 #define SPL_FILE_OBJECT_READ_AHEAD         0x00000002 /* read on rewind/next */
@@ -133,6 +101,7 @@ static inline spl_filesystem_object* spl_filesystem_iterator_to_object(spl_files
 #define SPL_FILE_DIR_KEY_AS_PATHNAME       0x00000000 /* make RecursiveDirectoryTree::key() return getPathname() */
 #define SPL_FILE_DIR_KEY_AS_FILENAME       0x00000100 /* make RecursiveDirectoryTree::key() return getFilename() */
 #define SPL_FILE_DIR_KEY_MODE_MASK         0x00000F00 /* mask RecursiveDirectoryTree::key() */
+#define SPL_FILE_NEW_CURRENT_AND_KEY       SPL_FILE_DIR_KEY_AS_FILENAME|SPL_FILE_DIR_CURRENT_AS_FILEINFO
 #define SPL_FILE_DIR_KEY(intern,mode)      ((intern->flags&SPL_FILE_DIR_KEY_MODE_MASK)==mode)
 
 #define SPL_FILE_DIR_SKIPDOTS              0x00001000 /* Tells whether it should skip dots or not */

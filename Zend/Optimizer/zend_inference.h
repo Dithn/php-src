@@ -2,15 +2,13 @@
    +----------------------------------------------------------------------+
    | Zend Engine, e-SSA based Type & Range Inference                      |
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Dmitry Stogov <dmitry@php.net>                              |
    +----------------------------------------------------------------------+
@@ -26,10 +24,11 @@
 /* Bitmask for type inference (zend_ssa_var_info.type) */
 #include "zend_type_info.h"
 
+#include <stdint.h>
+
 #define MAY_BE_PACKED_GUARD         (1<<27) /* needs packed array guard */
 #define MAY_BE_CLASS_GUARD          (1<<27) /* needs class guard */
 #define MAY_BE_GUARD                (1<<28) /* needs type guard */
-//#define MAY_BE_IN_REG               (1<<29) /* deprecated and not used */
 
 #define MAY_HAVE_DTOR \
 	(MAY_BE_OBJECT|MAY_BE_RESOURCE \
@@ -40,7 +39,7 @@
 	{ \
 		if (opline->opN##_type == IS_CONST) { \
 			zval *zv = CRT_CONSTANT(opline->opN); \
-			return (Z_TYPE_P(zv) == IS_LONG || Z_TYPE_P(zv) == IS_TRUE || Z_TYPE_P(zv) == IS_FALSE || Z_TYPE_P(zv) == IS_NULL); \
+			return (Z_TYPE_P(zv) == IS_LONG); \
 		} else { \
 			return (opline->opN##_type != IS_UNUSED && \
 		        ssa->var_info && \
@@ -57,12 +56,6 @@
 			zval *zv = CRT_CONSTANT(opline->opN); \
 			if (Z_TYPE_P(zv) == IS_LONG) { \
 				return Z_LVAL_P(zv); \
-			} else if (Z_TYPE_P(zv) == IS_TRUE) { \
-				return 1; \
-			} else if (Z_TYPE_P(zv) == IS_FALSE) { \
-				return 0; \
-			} else if (Z_TYPE_P(zv) == IS_NULL) { \
-				return 0; \
 			} \
 		} else if (opline->opN##_type != IS_UNUSED && \
 		    ssa->var_info && \
@@ -80,12 +73,6 @@
 			zval *zv = CRT_CONSTANT(opline->opN); \
 			if (Z_TYPE_P(zv) == IS_LONG) { \
 				return Z_LVAL_P(zv); \
-			} else if (Z_TYPE_P(zv) == IS_TRUE) { \
-				return 1; \
-			} else if (Z_TYPE_P(zv) == IS_FALSE) { \
-				return 0; \
-			} else if (Z_TYPE_P(zv) == IS_NULL) { \
-				return 0; \
 			} \
 		} else if (opline->opN##_type != IS_UNUSED && \
 		    ssa->var_info && \
@@ -101,7 +88,7 @@
 	{ \
 		if (opline->opN##_type == IS_CONST) { \
 			zval *zv = CRT_CONSTANT(opline->opN); \
-			if (Z_TYPE_P(zv) == IS_LONG || Z_TYPE_P(zv) == IS_TRUE || Z_TYPE_P(zv) == IS_FALSE || Z_TYPE_P(zv) == IS_NULL) { \
+			if (Z_TYPE_P(zv) == IS_LONG) { \
 				return 0; \
 			} \
 		} else if (opline->opN##_type != IS_UNUSED && \
@@ -118,7 +105,7 @@
 	{ \
 		if (opline->opN##_type == IS_CONST) { \
 			zval *zv = CRT_CONSTANT(opline->opN); \
-			if (Z_TYPE_P(zv) == IS_LONG || Z_TYPE_P(zv) == IS_TRUE || Z_TYPE_P(zv) == IS_FALSE || Z_TYPE_P(zv) == IS_NULL) { \
+			if (Z_TYPE_P(zv) == IS_LONG) { \
 				return 0; \
 			} \
 		} else if (opline->opN##_type != IS_UNUSED && \
@@ -208,13 +195,13 @@ DEFINE_SSA_OP_DEF_INFO(result)
 
 #define OP1_INFO()           (_ssa_op1_info(op_array, ssa, opline, ssa_op))
 #define OP2_INFO()           (_ssa_op2_info(op_array, ssa, opline, ssa_op))
-#define OP1_DATA_INFO()      (_ssa_op1_info(op_array, ssa, (opline+1), (ssa_op+1)))
-#define OP2_DATA_INFO()      (_ssa_op2_info(op_array, ssa, (opline+1), (ssa_op+1)))
+#define OP1_DATA_INFO()      (_ssa_op1_info(op_array, ssa, (opline+1), ssa_op ? (ssa_op+1) : NULL))
+#define OP2_DATA_INFO()      (_ssa_op2_info(op_array, ssa, (opline+1), ssa_op ? (ssa_op+1) : NULL))
 #define RES_USE_INFO()       (_ssa_result_info(op_array, ssa, opline, ssa_op))
 #define OP1_DEF_INFO()       (_ssa_op1_def_info(op_array, ssa, opline, ssa_op))
 #define OP2_DEF_INFO()       (_ssa_op2_def_info(op_array, ssa, opline, ssa_op))
-#define OP1_DATA_DEF_INFO()  (_ssa_op1_def_info(op_array, ssa, (opline+1), (ssa_op+1)))
-#define OP2_DATA_DEF_INFO()  (_ssa_op2_def_info(op_array, ssa, (opline+1), (ssa_op+1)))
+#define OP1_DATA_DEF_INFO()  (_ssa_op1_def_info(op_array, ssa, (opline+1), ssa_op ? (ssa_op+1) : NULL))
+#define OP2_DATA_DEF_INFO()  (_ssa_op2_def_info(op_array, ssa, (opline+1), ssa_op ? (ssa_op+1) : NULL))
 #define RES_INFO()           (_ssa_result_def_info(op_array, ssa, opline, ssa_op))
 
 static zend_always_inline bool zend_add_will_overflow(zend_long a, zend_long b) {
@@ -228,28 +215,28 @@ static zend_always_inline bool zend_sub_will_overflow(zend_long a, zend_long b) 
 
 BEGIN_EXTERN_C()
 
-ZEND_API void zend_ssa_find_false_dependencies(const zend_op_array *op_array, zend_ssa *ssa);
+ZEND_API void zend_ssa_find_false_dependencies(const zend_op_array *op_array, const zend_ssa *ssa);
 ZEND_API void zend_ssa_find_sccs(const zend_op_array *op_array, zend_ssa *ssa);
-ZEND_API int zend_ssa_inference(zend_arena **raena, const zend_op_array *op_array, const zend_script *script, zend_ssa *ssa, zend_long optimization_level);
+ZEND_API zend_result zend_ssa_inference(zend_arena **raena, const zend_op_array *op_array, const zend_script *script, zend_ssa *ssa, zend_long optimization_level);
 
-ZEND_API uint32_t zend_array_element_type(uint32_t t1, zend_uchar op_type, int write, int insert);
+ZEND_API uint32_t zend_array_element_type(uint32_t t1, uint8_t op_type, bool write, bool insert);
 
-ZEND_API bool zend_inference_propagate_range(const zend_op_array *op_array, zend_ssa *ssa, zend_op *opline, zend_ssa_op* ssa_op, int var, zend_ssa_range *tmp);
+ZEND_API bool zend_inference_propagate_range(const zend_op_array *op_array, const zend_ssa *ssa, const zend_op *opline, const zend_ssa_op* ssa_op, int var, zend_ssa_range *tmp);
 
 ZEND_API uint32_t zend_fetch_arg_info_type(
-	const zend_script *script, zend_arg_info *arg_info, zend_class_entry **pce);
+	const zend_script *script, const zend_arg_info *arg_info, zend_class_entry **pce);
 ZEND_API void zend_init_func_return_info(
 	const zend_op_array *op_array, const zend_script *script, zend_ssa_var_info *ret);
 uint32_t zend_get_return_info_from_signature_only(
 		const zend_function *func, const zend_script *script,
 		zend_class_entry **ce, bool *ce_is_instanceof, bool use_tentative_return_info);
 
-ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op, const zend_op_array *op_array, zend_ssa *ssa, uint32_t t1, uint32_t t2);
-ZEND_API bool zend_may_throw(const zend_op *opline, const zend_ssa_op *ssa_op, const zend_op_array *op_array, zend_ssa *ssa);
+ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op, const zend_op_array *op_array, const zend_ssa *ssa, uint32_t t1, uint32_t t2);
+ZEND_API bool zend_may_throw(const zend_op *opline, const zend_ssa_op *ssa_op, const zend_op_array *op_array, const zend_ssa *ssa);
 
 ZEND_API zend_result zend_update_type_info(
 	const zend_op_array *op_array, zend_ssa *ssa, const zend_script *script,
-	zend_op *opline, zend_ssa_op *ssa_op, const zend_op **ssa_opcodes,
+	const zend_op *opline, zend_ssa_op *ssa_op, const zend_op **ssa_opcodes,
 	zend_long optimization_level);
 
 END_EXTERN_C()

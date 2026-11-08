@@ -6,6 +6,15 @@ Attribute flags value is validated.
 #[Attribute(Foo::BAR)]
 class A1 { }
 
+#[A1]
+class Bar { }
+
+try {
+    var_dump((new ReflectionClass(Bar::class))->getAttributes()[0]->newInstance());
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
 ?>
---EXPECTF--
-Fatal error: Class "Foo" not found in %s on line %d
+--EXPECT--
+Error: Class "Foo" not found

@@ -3,7 +3,9 @@ explode() function
 --INI--
 error_reporting=2047
 --SKIPIF--
-<?php if (PHP_INT_SIZE != 8) die("skip this test is for 64-bit only");
+<?php
+if (PHP_INT_SIZE != 8) die("skip this test is for 64-bit only");
+?>
 --FILE--
 <?php
 /* From http://bugs.php.net/19865 */
@@ -14,18 +16,18 @@ echo "\n";
 
 try {
     var_dump(explode("", ""));
-} catch (\ValueError $e) {
-    echo $e->getMessage() . "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(explode("", NULL));
-} catch (\ValueError $e) {
-    echo $e->getMessage() . "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(explode(NULL, ""));
-} catch (\ValueError $e) {
-    echo $e->getMessage() . "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 var_dump(explode("a", ""));
@@ -33,8 +35,8 @@ var_dump(explode("a", "a"));
 var_dump(explode("a", NULL));
 try {
     var_dump(explode(NULL, "a"));
-} catch (\ValueError $e) {
-    echo $e->getMessage() . "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 var_dump(explode("abc", "acb"));
 var_dump(explode("somestring", "otherstring"));
@@ -60,9 +62,9 @@ array (
   4 => 'd',
 )
 d6bee42a771449205344c0938ad4f035
-explode(): Argument #1 ($separator) cannot be empty
-explode(): Argument #1 ($separator) cannot be empty
-explode(): Argument #1 ($separator) cannot be empty
+ValueError: explode(): Argument #1 ($separator) must not be empty, use str_split() to split a string into characters
+ValueError: explode(): Argument #1 ($separator) must not be empty, use str_split() to split a string into characters
+ValueError: explode(): Argument #1 ($separator) must not be empty, use str_split() to split a string into characters
 array(1) {
   [0]=>
   string(0) ""
@@ -77,7 +79,7 @@ array(1) {
   [0]=>
   string(0) ""
 }
-explode(): Argument #1 ($separator) cannot be empty
+ValueError: explode(): Argument #1 ($separator) must not be empty, use str_split() to split a string into characters
 array(1) {
   [0]=>
   string(3) "acb"

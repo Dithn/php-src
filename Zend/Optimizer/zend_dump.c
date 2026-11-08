@@ -2,15 +2,13 @@
    +----------------------------------------------------------------------+
    | Zend Engine, Bytecode Visualisation                                  |
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Dmitry Stogov <dmitry@php.net>                              |
    +----------------------------------------------------------------------+
@@ -23,17 +21,18 @@
 #include "zend_func_info.h"
 #include "zend_call_graph.h"
 #include "zend_dump.h"
+#include "zend_smart_str.h"
 
-void zend_dump_ht(HashTable *ht)
+void zend_dump_ht(const HashTable *ht)
 {
 	zend_ulong index;
 	zend_string *key;
 	zval *val;
-	bool first = 1;
+	bool first = true;
 
 	ZEND_HASH_FOREACH_KEY_VAL(ht, index, key, val) {
 		if (first) {
-			first = 0;
+			first = false;
 		} else {
 			fprintf(stderr, ", ");
 		}
@@ -65,9 +64,27 @@ void zend_dump_const(const zval *zv)
 		case IS_DOUBLE:
 			fprintf(stderr, " float(%g)", Z_DVAL_P(zv));
 			break;
-		case IS_STRING:
-			fprintf(stderr, " string(\"%s\")", Z_STRVAL_P(zv));
+		case IS_STRING: {
+			smart_str escaped_string = {0};
+			smart_str_append_escaped(&escaped_string, Z_STRVAL_P(zv), Z_STRLEN_P(zv));
+			smart_str_0(&escaped_string);
+
+			fprintf(stderr, " string(\"");
+
+			/* Also escape '"' */
+			for (size_t i = 0; i < ZSTR_LEN(escaped_string.s); i++) {
+				if (ZSTR_VAL(escaped_string.s)[i] == '"') {
+					fprintf(stderr, "\\\"");
+				} else {
+					putc(ZSTR_VAL(escaped_string.s)[i], stderr);
+				}
+			}
+
+			fprintf(stderr, "\")");
+
+			smart_str_free_ex(&escaped_string, false);
 			break;
+		}
 		case IS_ARRAY:
 			fprintf(stderr, " array(...)");
 			break;
@@ -117,6 +134,10 @@ static void zend_dump_unused_op(const zend_op *opline, znode_op op, uint32_t fla
 		if (op.num != (uint32_t)-1) {
 			fprintf(stderr, " try-catch(%u)", op.num);
 		}
+	} else if (ZEND_VM_OP_LOOP_END == (flags & ZEND_VM_OP_MASK)) {
+		if (opline->extended_value & ZEND_FREE_ON_RETURN) {
+			fprintf(stderr, " loop-end(+%u)", op.num);
+		}
 	} else if (ZEND_VM_OP_THIS == (flags & ZEND_VM_OP_MASK)) {
 		fprintf(stderr, " THIS");
 	} else if (ZEND_VM_OP_NEXT == (flags & ZEND_VM_OP_MASK)) {
@@ -132,7 +153,7 @@ static void zend_dump_unused_op(const zend_op *opline, znode_op op, uint32_t fla
 	}
 }
 
-ZEND_API void zend_dump_var(const zend_op_array *op_array, zend_uchar var_type, int var_num)
+ZEND_API void zend_dump_var(const zend_op_array *op_array, uint8_t var_type, uint32_t var_num)
 {
 	if (var_type == IS_CV && var_num < op_array->last_var) {
 		fprintf(stderr, "CV%d($%s)", var_num, op_array->vars[var_num]->val);
@@ -167,38 +188,38 @@ static void zend_dump_range(const zend_ssa_range *r)
 	}
 }
 
-static void zend_dump_type_info(uint32_t info, zend_class_entry *ce, int is_instanceof, uint32_t dump_flags)
+static void zend_dump_type_info(uint32_t info, const zend_class_entry *ce, bool is_instanceof, uint32_t dump_flags)
 {
-	bool first = 1;
+	bool first = true;
 
 	fprintf(stderr, " [");
 	if (info & MAY_BE_GUARD) {
 		fprintf(stderr, "!");
 	}
 	if (info & MAY_BE_UNDEF) {
-		if (first) first = 0; else fprintf(stderr, ", ");
+		if (first) first = false; else fprintf(stderr, ", ");
 		fprintf(stderr, "undef");
 	}
 	if (info & MAY_BE_INDIRECT) {
-		if (first) first = 0; else fprintf(stderr, ", ");
+		if (first) first = false; else fprintf(stderr, ", ");
 		fprintf(stderr, "ind");
 	}
 	if (info & MAY_BE_REF) {
-		if (first) first = 0; else fprintf(stderr, ", ");
+		if (first) first = false; else fprintf(stderr, ", ");
 		fprintf(stderr, "ref");
 	}
 	if (dump_flags & ZEND_DUMP_RC_INFERENCE) {
 		if (info & MAY_BE_RC1) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "rc1");
 		}
 		if (info & MAY_BE_RCN) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "rcn");
 		}
 	}
 	if (info & MAY_BE_CLASS) {
-		if (first) first = 0; else fprintf(stderr, ", ");
+		if (first) first = false; else fprintf(stderr, ", ");
 		fprintf(stderr, "class");
 		if (ce) {
 			if (is_instanceof) {
@@ -208,119 +229,132 @@ static void zend_dump_type_info(uint32_t info, zend_class_entry *ce, int is_inst
 			}
 		}
 	} else if ((info & MAY_BE_ANY) == MAY_BE_ANY) {
-		if (first) first = 0; else fprintf(stderr, ", ");
+		if (first) first = false; else fprintf(stderr, ", ");
 		fprintf(stderr, "any");
 	} else {
 		if (info & MAY_BE_NULL) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "null");
 		}
 		if ((info & MAY_BE_FALSE) && (info & MAY_BE_TRUE)) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "bool");
 		} else if (info & MAY_BE_FALSE) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "false");
 		} else if (info & MAY_BE_TRUE) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "true");
 		}
 		if (info & MAY_BE_LONG) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "long");
 		}
 		if (info & MAY_BE_DOUBLE) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "double");
 		}
 		if (info & MAY_BE_STRING) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "string");
 		}
 		if (info & MAY_BE_ARRAY) {
-			if (first) first = 0; else fprintf(stderr, ", ");
-			if (!(info & MAY_BE_ARRAY_KEY_STRING) || (info & MAY_BE_PACKED_GUARD)) {
-				if (MAY_BE_PACKED_ONLY(info)) {
-					if (info & MAY_BE_PACKED_GUARD) {
-						fprintf(stderr, "!");
-					}
-					fprintf(stderr, "packed ");
-				} else if (MAY_BE_HASH_ONLY(info)) {
-					if (info & MAY_BE_PACKED_GUARD) {
-						fprintf(stderr, "!");
-					}
-					fprintf(stderr, "hash ");
+			if (first) first = false; else fprintf(stderr, ", ");
+			if (info & MAY_BE_PACKED_GUARD) {
+				fprintf(stderr, "!");
+			}
+			if (MAY_BE_EMPTY_ONLY(info)) {
+				fprintf(stderr, "empty ");
+			} else if (MAY_BE_PACKED_ONLY(info)) {
+				fprintf(stderr, "packed ");
+			} else if (MAY_BE_HASH_ONLY(info)) {
+				fprintf(stderr, "hash ");
+			} else if ((info & MAY_BE_ARRAY_KEY_ANY) != MAY_BE_ARRAY_KEY_ANY && (info & MAY_BE_ARRAY_KEY_ANY) != 0) {
+				bool afirst = true;
+				fprintf(stderr, "[");
+				if (info & MAY_BE_ARRAY_EMPTY) {
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
+					fprintf(stderr, "empty");
 				}
+				if (MAY_BE_PACKED(info)) {
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
+					fprintf(stderr, "packed");
+				}
+				if (MAY_BE_HASH(info)) {
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
+					fprintf(stderr, "hash");
+				}
+				fprintf(stderr, "] ");
 			}
 			fprintf(stderr, "array");
-			if ((info & MAY_BE_ARRAY_KEY_ANY) != 0 &&
+			if ((info & (MAY_BE_ARRAY_KEY_LONG|MAY_BE_ARRAY_KEY_STRING)) != 0 &&
 			    ((info & MAY_BE_ARRAY_KEY_LONG) == 0 ||
 			     (info & MAY_BE_ARRAY_KEY_STRING) == 0)) {
-				bool afirst = 1;
+				bool afirst = true;
 				fprintf(stderr, " [");
 				if (info & MAY_BE_ARRAY_KEY_LONG) {
-					if (afirst) afirst = 0; else fprintf(stderr, ", ");
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
 					fprintf(stderr, "long");
 				}
 				if (info & MAY_BE_ARRAY_KEY_STRING) {
-					if (afirst) afirst = 0; else fprintf(stderr, ", ");
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "string");
 					}
 				fprintf(stderr, "]");
 			}
 			if (info & (MAY_BE_ARRAY_OF_ANY|MAY_BE_ARRAY_OF_REF)) {
-				bool afirst = 1;
+				bool afirst = true;
 				fprintf(stderr, " of [");
 				if ((info & MAY_BE_ARRAY_OF_ANY) == MAY_BE_ARRAY_OF_ANY) {
-					if (afirst) afirst = 0; else fprintf(stderr, ", ");
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
 					fprintf(stderr, "any");
 				} else {
 					if (info & MAY_BE_ARRAY_OF_NULL) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "null");
 					}
 					if (info & MAY_BE_ARRAY_OF_FALSE) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "false");
 					}
 					if (info & MAY_BE_ARRAY_OF_TRUE) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "true");
 					}
 					if (info & MAY_BE_ARRAY_OF_LONG) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "long");
 					}
 					if (info & MAY_BE_ARRAY_OF_DOUBLE) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "double");
 					}
 					if (info & MAY_BE_ARRAY_OF_STRING) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "string");
 					}
 					if (info & MAY_BE_ARRAY_OF_ARRAY) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "array");
 					}
 					if (info & MAY_BE_ARRAY_OF_OBJECT) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "object");
 					}
 					if (info & MAY_BE_ARRAY_OF_RESOURCE) {
-						if (afirst) afirst = 0; else fprintf(stderr, ", ");
+						if (afirst) afirst = false; else fprintf(stderr, ", ");
 						fprintf(stderr, "resource");
 					}
 				}
 				if (info & MAY_BE_ARRAY_OF_REF) {
-					if (afirst) afirst = 0; else fprintf(stderr, ", ");
+					if (afirst) afirst = false; else fprintf(stderr, ", ");
 					fprintf(stderr, "ref");
 				}
 				fprintf(stderr, "]");
 			}
 		}
 		if (info & MAY_BE_OBJECT) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "object");
 			if (ce) {
 				if (is_instanceof) {
@@ -331,7 +365,7 @@ static void zend_dump_type_info(uint32_t info, zend_class_entry *ce, int is_inst
 			}
 		}
 		if (info & MAY_BE_RESOURCE) {
-			if (first) first = 0; else fprintf(stderr, ", ");
+			if (first) first = false; else fprintf(stderr, ", ");
 			fprintf(stderr, "resource");
 		}
 	}
@@ -348,7 +382,7 @@ static void zend_dump_ssa_var_info(const zend_ssa *ssa, int ssa_var_num, uint32_
 		dump_flags);
 }
 
-ZEND_API void zend_dump_ssa_var(const zend_op_array *op_array, const zend_ssa *ssa, int ssa_var_num, zend_uchar var_type, int var_num, uint32_t dump_flags)
+ZEND_API void zend_dump_ssa_var(const zend_op_array *op_array, const zend_ssa *ssa, int ssa_var_num, uint8_t var_type, uint32_t var_num, uint32_t dump_flags)
 {
 	if (ssa_var_num >= 0) {
 		fprintf(stderr, "#%d.", ssa_var_num);
@@ -443,6 +477,11 @@ ZEND_API void zend_dump_op(const zend_op_array *op_array, const zend_basic_block
 		fprintf(stderr, "%s", (name + 5));
 	} else {
 		fprintf(stderr, "OP_%d", (int)opline->opcode);
+	}
+
+	if (ZEND_OP_IS_FRAMELESS_ICALL(opline->opcode)) {
+		const zend_function *func = ZEND_FLF_FUNC(opline);
+		fprintf(stderr, "(%s)", ZSTR_VAL(func->common.function_name));
 	}
 
 	if (ZEND_VM_EXT_NUM == (flags & ZEND_VM_EXT_MASK)) {
@@ -633,13 +672,13 @@ ZEND_API void zend_dump_op(const zend_op_array *op_array, const zend_basic_block
 	}
 
 	if (opline->op2_type == IS_CONST) {
-		zval *op = CRT_CONSTANT(opline->op2);
+		const zval *op = CRT_CONSTANT(opline->op2);
 		if (
 			opline->opcode == ZEND_SWITCH_LONG
 			|| opline->opcode == ZEND_SWITCH_STRING
 			|| opline->opcode == ZEND_MATCH
 		) {
-			HashTable *jumptable = Z_ARRVAL_P(op);
+			const HashTable *jumptable = Z_ARRVAL_P(op);
 			zend_string *key;
 			zend_ulong num_key;
 			zval *zv;
@@ -737,7 +776,7 @@ ZEND_API void zend_dump_op_line(const zend_op_array *op_array, const zend_basic_
 {
 	int len = 0;
 	const zend_ssa *ssa = NULL;
-	zend_ssa_op *ssa_op = NULL;
+	const zend_ssa_op *ssa_op = NULL;
 
 	if (dump_flags & ZEND_DUMP_LINE_NUMBERS) {
 		fprintf(stderr, "L%04u ", opline->lineno);
@@ -759,7 +798,7 @@ ZEND_API void zend_dump_op_line(const zend_op_array *op_array, const zend_basic_
 
 static void zend_dump_block_info(const zend_cfg *cfg, int n, uint32_t dump_flags)
 {
-	zend_basic_block *b = cfg->blocks + n;
+	const zend_basic_block *b = cfg->blocks + n;
 
 	if (n > 0) {
 		fprintf(stderr, "\n");
@@ -815,8 +854,8 @@ static void zend_dump_block_info(const zend_cfg *cfg, int n, uint32_t dump_flags
 	fprintf(stderr, "\n");
 
 	if (b->predecessors_count) {
-		int *p = cfg->predecessors + b->predecessor_offset;
-		int *end = p + b->predecessors_count;
+		const int *p = cfg->predecessors + b->predecessor_offset;
+		const int *end = p + b->predecessors_count;
 
 		fprintf(stderr, "     ; from=(BB%d", *p);
 		for (p++; p < end; p++) {
@@ -826,9 +865,8 @@ static void zend_dump_block_info(const zend_cfg *cfg, int n, uint32_t dump_flags
 	}
 
 	if (b->successors_count > 0) {
-		int s;
 		fprintf(stderr, "     ; to=(BB%d", b->successors[0]);
-		for (s = 1; s < b->successors_count; s++) {
+		for (uint32_t s = 1; s < b->successors_count; s++) {
 			fprintf(stderr, ", BB%d", b->successors[s]);
 		}
 		fprintf(stderr, ")\n");
@@ -859,16 +897,14 @@ static void zend_dump_block_header(const zend_cfg *cfg, const zend_op_array *op_
 {
 	zend_dump_block_info(cfg, n, dump_flags);
 	if (ssa && ssa->blocks && ssa->blocks[n].phis) {
-		zend_ssa_phi *p = ssa->blocks[n].phis;
+		const zend_ssa_phi *p = ssa->blocks[n].phis;
 
 		do {
-			int j;
-
 			fprintf(stderr, "     ");
 			zend_dump_ssa_var(op_array, ssa, p->ssa_var, 0, p->var, dump_flags);
 			if (p->pi < 0) {
 				fprintf(stderr, " = Phi(");
-				for (j = 0; j < cfg->blocks[n].predecessors_count; j++) {
+				for (uint32_t j = 0; j < cfg->blocks[n].predecessors_count; j++) {
 					if (j > 0) {
 						fprintf(stderr, ", ");
 					}
@@ -906,10 +942,9 @@ void zend_dump_op_array_name(const zend_op_array *op_array)
 
 ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_flags, const char *msg, const void *data)
 {
-	int i;
 	const zend_cfg *cfg = NULL;
 	const zend_ssa *ssa = NULL;
-	zend_func_info *func_info = NULL;
+	const zend_func_info *func_info = NULL;
 	uint32_t func_flags = 0;
 
 	if (dump_flags & (ZEND_DUMP_CFG|ZEND_DUMP_SSA)) {
@@ -992,7 +1027,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 	}
 
 	if (ssa && ssa->var_info) {
-		for (i = 0; i < op_array->last_var; i++) {
+		for (uint32_t i = 0; i < op_array->last_var; i++) {
 			fprintf(stderr, "     ; ");
 			zend_dump_ssa_var(op_array, ssa, i, IS_CV, i, dump_flags);
 			fprintf(stderr, "\n");
@@ -1000,11 +1035,8 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 	}
 
 	if (cfg) {
-		int n;
-		zend_basic_block *b;
-
-		for (n = 0; n < cfg->blocks_count; n++) {
-			b = cfg->blocks + n;
+		for (uint32_t n = 0; n < cfg->blocks_count; n++) {
+			const zend_basic_block *b = cfg->blocks + n;
 			if (!(dump_flags & ZEND_DUMP_HIDE_UNREACHABLE) || (b->flags & ZEND_BB_REACHABLE)) {
 				const zend_op *opline;
 				const zend_op *end;
@@ -1020,7 +1052,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 		}
 		if (op_array->last_live_range && (dump_flags & ZEND_DUMP_LIVE_RANGES)) {
 			fprintf(stderr, "LIVE RANGES:\n");
-			for (i = 0; i < op_array->last_live_range; i++) {
+			for (uint32_t i = 0; i < op_array->last_live_range; i++) {
 				fprintf(stderr,
 					"     %u: %04u - %04u ",
 					EX_VAR_TO_NUM(op_array->live_range[i].var & ~ZEND_LIVE_MASK),
@@ -1047,7 +1079,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 		}
 		if (op_array->last_try_catch) {
 			fprintf(stderr, "EXCEPTION TABLE:\n");
-			for (i = 0; i < op_array->last_try_catch; i++) {
+			for (uint32_t i = 0; i < op_array->last_try_catch; i++) {
 				fprintf(stderr, "        BB%u",
 					cfg->map[op_array->try_catch_array[i].try_op]);
 				if (op_array->try_catch_array[i].catch_op) {
@@ -1080,7 +1112,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 		}
 		if (op_array->last_live_range && (dump_flags & ZEND_DUMP_LIVE_RANGES)) {
 			fprintf(stderr, "LIVE RANGES:\n");
-			for (i = 0; i < op_array->last_live_range; i++) {
+			for (uint32_t i = 0; i < op_array->last_live_range; i++) {
 				fprintf(stderr,
 					"     %u: %04u - %04u ",
 					EX_VAR_TO_NUM(op_array->live_range[i].var & ~ZEND_LIVE_MASK),
@@ -1107,7 +1139,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 		}
 		if (op_array->last_try_catch) {
 			fprintf(stderr, "EXCEPTION TABLE:\n");
-			for (i = 0; i < op_array->last_try_catch; i++) {
+			for (uint32_t i = 0; i < op_array->last_try_catch; i++) {
 				fprintf(stderr,
 					"     %04u",
 					op_array->try_catch_array[i].try_op);
@@ -1128,7 +1160,7 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 				}
 				if (op_array->try_catch_array[i].finally_end) {
 					fprintf(stderr,
-						", %04u",
+						", %04u\n",
 						op_array->try_catch_array[i].finally_end);
 				} else {
 					fprintf(stderr, ", -\n");
@@ -1140,43 +1172,25 @@ ZEND_API void zend_dump_op_array(const zend_op_array *op_array, uint32_t dump_fl
 
 void zend_dump_dominators(const zend_op_array *op_array, const zend_cfg *cfg)
 {
-	int j;
-
 	fprintf(stderr, "\nDOMINATORS-TREE for \"");
 	zend_dump_op_array_name(op_array);
 	fprintf(stderr, "\"\n");
-	for (j = 0; j < cfg->blocks_count; j++) {
-		zend_basic_block *b = cfg->blocks + j;
+	for (uint32_t j = 0; j < cfg->blocks_count; j++) {
+		const zend_basic_block *b = cfg->blocks + j;
 		if (b->flags & ZEND_BB_REACHABLE) {
 			zend_dump_block_info(cfg, j, 0);
 		}
 	}
 }
 
-void zend_dump_variables(const zend_op_array *op_array)
-{
-	int j;
-
-	fprintf(stderr, "\nCV Variables for \"");
-	zend_dump_op_array_name(op_array);
-	fprintf(stderr, "\"\n");
-	for (j = 0; j < op_array->last_var; j++) {
-		fprintf(stderr, "    ");
-		zend_dump_var(op_array, IS_CV, j);
-		fprintf(stderr, "\n");
-	}
-}
-
 void zend_dump_ssa_variables(const zend_op_array *op_array, const zend_ssa *ssa, uint32_t dump_flags)
 {
-	int j;
-
 	if (ssa->vars) {
 		fprintf(stderr, "\nSSA Variable for \"");
 		zend_dump_op_array_name(op_array);
 		fprintf(stderr, "\"\n");
 
-		for (j = 0; j < ssa->vars_count; j++) {
+		for (int j = 0; j < ssa->vars_count; j++) {
 			fprintf(stderr, "    ");
 			zend_dump_ssa_var(op_array, ssa, j, IS_CV, ssa->vars[j].var, dump_flags);
 			if (ssa->vars[j].scc >= 0) {
@@ -1194,14 +1208,13 @@ void zend_dump_ssa_variables(const zend_op_array *op_array, const zend_ssa *ssa,
 
 static void zend_dump_var_set(const zend_op_array *op_array, const char *name, zend_bitset set)
 {
-	bool first = 1;
-	uint32_t i;
+	bool first = true;
 
 	fprintf(stderr, "    ; %s = {", name);
-	for (i = 0; i < op_array->last_var + op_array->T; i++) {
+	for (uint32_t i = 0; i < op_array->last_var + op_array->T; i++) {
 		if (zend_bitset_in(set, i)) {
 			if (first) {
-				first = 0;
+				first = false;
 			} else {
 				fprintf(stderr, ", ");
 			}
@@ -1213,12 +1226,11 @@ static void zend_dump_var_set(const zend_op_array *op_array, const char *name, z
 
 void zend_dump_dfg(const zend_op_array *op_array, const zend_cfg *cfg, const zend_dfg *dfg)
 {
-	int j;
 	fprintf(stderr, "\nVariable Liveness for \"");
 	zend_dump_op_array_name(op_array);
 	fprintf(stderr, "\"\n");
 
-	for (j = 0; j < cfg->blocks_count; j++) {
+	for (uint32_t j = 0; j < cfg->blocks_count; j++) {
 		fprintf(stderr, "  BB%d:\n", j);
 		zend_dump_var_set(op_array, "def", DFG_BITSET(dfg->def, dfg->size, j));
 		zend_dump_var_set(op_array, "use", DFG_BITSET(dfg->use, dfg->size, j));
@@ -1229,17 +1241,16 @@ void zend_dump_dfg(const zend_op_array *op_array, const zend_cfg *cfg, const zen
 
 void zend_dump_phi_placement(const zend_op_array *op_array, const zend_ssa *ssa)
 {
-	int j;
-	zend_ssa_block *ssa_blocks = ssa->blocks;
-	int blocks_count = ssa->cfg.blocks_count;
+	const zend_ssa_block *ssa_blocks = ssa->blocks;
+	uint32_t blocks_count = ssa->cfg.blocks_count;
 
 	fprintf(stderr, "\nSSA Phi() Placement for \"");
 	zend_dump_op_array_name(op_array);
 	fprintf(stderr, "\"\n");
-	for (j = 0; j < blocks_count; j++) {
+	for (uint32_t j = 0; j < blocks_count; j++) {
 		if (ssa_blocks && ssa_blocks[j].phis) {
-			zend_ssa_phi *p = ssa_blocks[j].phis;
-			int first = 1;
+			const zend_ssa_phi *p = ssa_blocks[j].phis;
+			bool first = true;
 
 			fprintf(stderr, "  BB%d:\n", j);
 			if (p->pi >= 0) {
@@ -1249,7 +1260,7 @@ void zend_dump_phi_placement(const zend_op_array *op_array, const zend_ssa *ssa)
 			}
 			do {
 				if (first) {
-					first = 0;
+					first = false;
 				} else {
 					fprintf(stderr, ", ");
 				}

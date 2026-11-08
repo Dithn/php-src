@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Derick Rethans <derick@derickrethans.nl>                    |
    +----------------------------------------------------------------------+
@@ -19,6 +17,23 @@
 
 #include "lib/timelib.h"
 #include "Zend/zend_hash.h"
+
+/* Same as SIZEOF_ZEND_LONG but using TIMELIB_LONG_MAX/MIN */
+#if TIMELIB_LONG_MAX == INT32_MAX
+# define PHP_DATE_SIZEOF_LONG 4
+#elif TIMELIB_LONG_MAX == INT64_MAX
+# define PHP_DATE_SIZEOF_LONG 8
+#else
+# error "Unknown TIMELIB LONG SIZE"
+#endif
+
+/* Same as ZEND_DOUBLE_FITS_LONG but using TIMELIB_LONG_MAX/MIN */
+#if PHP_DATE_SIZEOF_LONG == 4
+# define PHP_DATE_DOUBLE_FITS_LONG(d) (!((d) > (double)TIMELIB_LONG_MAX || (d) < (double)TIMELIB_LONG_MIN))
+#elif PHP_DATE_SIZEOF_LONG == 8
+  /* >= as (double)TIMELIB_LONG_MAX is outside signed range */
+# define PHP_DATE_DOUBLE_FITS_LONG(d) (!((d) >= (double)TIMELIB_LONG_MAX || (d) < (double)TIMELIB_LONG_MIN))
+#endif
 
 #include "php_version.h"
 #define PHP_DATE_VERSION PHP_VERSION
@@ -43,9 +58,7 @@ struct _php_date_obj {
 	zend_object   std;
 };
 
-static inline php_date_obj *php_date_obj_from_obj(zend_object *obj) {
-	return (php_date_obj*)((char*)(obj) - XtOffsetOf(php_date_obj, std));
-}
+#define php_date_obj_from_obj(obj) ZEND_CONTAINER_OF(obj, php_date_obj, std)
 
 #define Z_PHPDATE_P(zv)  php_date_obj_from_obj(Z_OBJ_P((zv)))
 
@@ -60,9 +73,7 @@ struct _php_timezone_obj {
 	zend_object std;
 };
 
-static inline php_timezone_obj *php_timezone_obj_from_obj(zend_object *obj) {
-	return (php_timezone_obj*)((char*)(obj) - XtOffsetOf(php_timezone_obj, std));
-}
+#define php_timezone_obj_from_obj(obj) ZEND_CONTAINER_OF(obj, php_timezone_obj, std)
 
 #define Z_PHPTIMEZONE_P(zv)  php_timezone_obj_from_obj(Z_OBJ_P((zv)))
 
@@ -73,12 +84,12 @@ struct _php_interval_obj {
 	timelib_rel_time *diff;
 	int               civil_or_wall;
 	bool              initialized;
+	bool              from_string;
+	zend_string      *date_string;
 	zend_object       std;
 };
 
-static inline php_interval_obj *php_interval_obj_from_obj(zend_object *obj) {
-	return (php_interval_obj*)((char*)(obj) - XtOffsetOf(php_interval_obj, std));
-}
+#define php_interval_obj_from_obj(obj) ZEND_CONTAINER_OF(obj, php_interval_obj, std)
 
 #define Z_PHPINTERVAL_P(zv)  php_interval_obj_from_obj(Z_OBJ_P((zv)))
 
@@ -91,12 +102,11 @@ struct _php_period_obj {
 	int               recurrences;
 	bool              initialized;
 	bool              include_start_date;
+	bool              include_end_date;
 	zend_object       std;
 };
 
-static inline php_period_obj *php_period_obj_from_obj(zend_object *obj) {
-	return (php_period_obj*)((char*)(obj) - XtOffsetOf(php_period_obj, std));
-}
+#define php_period_obj_from_obj(obj) ZEND_CONTAINER_OF(obj, php_period_obj, std)
 
 #define Z_PHPPERIOD_P(zv)  php_period_obj_from_obj(Z_OBJ_P((zv)))
 
@@ -105,8 +115,10 @@ ZEND_BEGIN_MODULE_GLOBALS(date)
 	char                    *timezone;
 	HashTable               *tzcache;
 	timelib_error_container *last_errors;
-	int                     timezone_valid;
+	zend_object             *duration_cache;
 ZEND_END_MODULE_GLOBALS(date)
+
+PHPAPI ZEND_EXTERN_MODULE_GLOBALS(date)
 
 #define DATEG(v) ZEND_MODULE_GLOBALS_ACCESSOR(date, v)
 
@@ -115,12 +127,13 @@ PHPAPI time_t php_time(void);
 /* Backwards compatibility wrapper */
 PHPAPI zend_long php_parse_date(const char *string, zend_long *now);
 PHPAPI void php_mktime(INTERNAL_FUNCTION_PARAMETERS, bool gmt);
-PHPAPI int php_idate(char format, time_t ts, bool localtime);
+PHPAPI bool php_idate(char format, time_t ts, bool localtime, int *result);
 
 #define _php_strftime php_strftime
 
 PHPAPI void php_strftime(INTERNAL_FUNCTION_PARAMETERS, bool gm);
 PHPAPI zend_string *php_format_date(const char *format, size_t format_len, time_t ts, bool localtime);
+PHPAPI zend_string *php_format_date_obj(const char *format, size_t format_len, const php_date_obj *date_obj);
 
 /* Mechanism to set new TZ database */
 PHPAPI void php_date_set_tzdb(timelib_tzdb *tzdb);
@@ -140,6 +153,7 @@ PHPAPI zend_class_entry *php_date_get_period_ce(void);
 
 PHPAPI zval *php_date_instantiate(zend_class_entry *pce, zval *object);
 PHPAPI bool php_date_initialize(php_date_obj *dateobj, const char *time_str, size_t time_str_len, const char *format, zval *timezone_object, int flags);
-
+PHPAPI void php_date_initialize_from_ts_long(php_date_obj *dateobj, zend_long sec, int usec);
+PHPAPI bool php_date_initialize_from_ts_double(php_date_obj *dateobj, double ts);
 
 #endif /* PHP_DATE_H */

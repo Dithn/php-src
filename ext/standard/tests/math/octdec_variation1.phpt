@@ -57,8 +57,8 @@ foreach($inputs as $input) {
     echo "\n-- Iteration $iterator --\n";
     try {
         var_dump(octdec($input));
-    } catch (TypeError $e) {
-        echo $e->getMessage(), "\n";
+    } catch (Throwable $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
     }
     $iterator++;
 };
@@ -78,44 +78,28 @@ int(1)
 int(5349)
 
 -- Iteration 4 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(1253)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 5 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(1134037)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 6 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(1134038)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 7 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(69)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 8 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(69)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 9 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(175304192)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 10 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(342391)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 11 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(5)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 12 --
 int(1)
@@ -136,23 +120,17 @@ int(0)
 int(0)
 
 -- Iteration 18 --
-octdec(): Argument #1 ($octal_string) must be of type string, array given
+TypeError: octdec(): Argument #1 ($octal_string) must be of type string, array given
 
 -- Iteration 19 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(0)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 20 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(0)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 21 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(0)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 22 --
-octdec(): Argument #1 ($octal_string) must be of type string, resource given
+TypeError: octdec(): Argument #1 ($octal_string) must be of type string, resource given
 ---Done---

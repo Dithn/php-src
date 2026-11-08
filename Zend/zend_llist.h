@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Andi Gutmans <andi@php.net>                                 |
    |          Zeev Suraski <zeev@php.net>                                 |
@@ -19,6 +18,8 @@
 
 #ifndef ZEND_LLIST_H
 #define ZEND_LLIST_H
+
+#include "zend_portability.h"
 
 typedef struct _zend_llist_element {
 	struct _zend_llist_element *next;
@@ -66,10 +67,25 @@ ZEND_API void *zend_llist_get_last_ex(zend_llist *l, zend_llist_position *pos);
 ZEND_API void *zend_llist_get_next_ex(zend_llist *l, zend_llist_position *pos);
 ZEND_API void *zend_llist_get_prev_ex(zend_llist *l, zend_llist_position *pos);
 
-#define zend_llist_get_first(l) zend_llist_get_first_ex(l, NULL)
-#define zend_llist_get_last(l) zend_llist_get_last_ex(l, NULL)
-#define zend_llist_get_next(l) zend_llist_get_next_ex(l, NULL)
-#define zend_llist_get_prev(l) zend_llist_get_prev_ex(l, NULL)
+static zend_always_inline void *zend_llist_get_first(zend_llist *l)
+{
+	return zend_llist_get_first_ex(l, NULL);
+}
+
+static zend_always_inline void *zend_llist_get_last(zend_llist *l)
+{
+	return zend_llist_get_last_ex(l, NULL);
+}
+
+static zend_always_inline void *zend_llist_get_next(zend_llist *l)
+{
+	return zend_llist_get_next_ex(l, NULL);
+}
+
+static zend_always_inline void *zend_llist_get_prev(zend_llist *l)
+{
+	return zend_llist_get_prev_ex(l, NULL);
+}
 
 END_EXTERN_C()
 

@@ -16,7 +16,6 @@ typedef void* yyscan_t;
 
 #include "phpdbg_cmd.h"
 #include "phpdbg_utils.h"
-#include "phpdbg_cmd.h"
 #include "phpdbg_prompt.h"
 
 #include "phpdbg_parser.h"
@@ -66,7 +65,7 @@ ZEND_EXTERN_MODULE_GLOBALS(phpdbg)
 input
 	: command { $$ = $1; }
 	| input T_SEPARATOR command { phpdbg_stack_separate($1.top); $$ = $3; }
-	| %empty
+	| %empty { (void) phpdbg_nerrs; }
 	;
 
 command

@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Wez Furlong <wez@php.net>                                    |
   |         Frank M. Kromann <frank@kromann.info>                        |
@@ -21,10 +19,9 @@
 
 #include "php.h"
 #include "php_ini.h"
-#include "ext/standard/php_string.h"
 #include "ext/standard/info.h"
-#include "pdo/php_pdo.h"
-#include "pdo/php_pdo_driver.h"
+#include "ext/pdo/php_pdo.h"
+#include "ext/pdo/php_pdo_driver.h"
 #include "php_pdo_dblib.h"
 #include "php_pdo_dblib_int.h"
 #include "zend_exceptions.h"
@@ -42,7 +39,7 @@ static char *pdo_dblib_get_field_name(int type)
 	 * (example: varchar is reported as char by dbprtype)
 	 *
 	 * FIX ME: Cache datatypes from server systypes table in pdo_dblib_handle_factory()
-	 * 		   to make this future proof.
+	 * 		   to make this future-proof.
 	 */
 
 	switch (type) {
@@ -95,6 +92,8 @@ static int pdo_dblib_stmt_cursor_closer(pdo_stmt_t *stmt)
 {
 	pdo_dblib_stmt *S = (pdo_dblib_stmt*)stmt->driver_data;
 	pdo_dblib_db_handle *H = S->H;
+
+	dbsetuserdata(H->link, (BYTE*) &S->err);
 
 	/* Cancel any pending results */
 	dbcancel(H->link);
@@ -153,6 +152,8 @@ static int pdo_dblib_stmt_next_rowset(pdo_stmt_t *stmt)
 	pdo_dblib_db_handle *H = S->H;
 	RETCODE ret = SUCCESS;
 
+	dbsetuserdata(H->link, (BYTE*) &S->err);
+
 	/* Ideally use dbcanquery here, but there is a bug in FreeTDS's implementation of dbcanquery
 	 * It has been resolved but is currently only available in nightly builds
 	 */
@@ -202,6 +203,8 @@ static int pdo_dblib_stmt_fetch(pdo_stmt_t *stmt,
 	pdo_dblib_stmt *S = (pdo_dblib_stmt*)stmt->driver_data;
 	pdo_dblib_db_handle *H = S->H;
 
+	dbsetuserdata(H->link, (BYTE*) &S->err);
+
 	ret = dbnextrow(H->link);
 
 	if (FAIL == ret) {
@@ -227,6 +230,8 @@ static int pdo_dblib_stmt_describe(pdo_stmt_t *stmt, int colno)
 		return FAILURE;
 	}
 
+	dbsetuserdata(H->link, (BYTE*) &S->err);
+
 	if (colno == 0) {
 		S->computed_column_name_count = 0;
 	}
@@ -244,7 +249,7 @@ static int pdo_dblib_stmt_describe(pdo_stmt_t *stmt, int colno)
 			len = snprintf(buf, sizeof(buf), "computed%d", S->computed_column_name_count);
 			col->name = zend_string_init(buf, len, 0);
 		} else {
-			col->name = zend_string_init("computed", strlen("computed"), 0);
+			col->name = ZSTR_INIT_LITERAL("computed", 0);
 		}
 
 		S->computed_column_name_count++;
@@ -350,6 +355,8 @@ static int pdo_dblib_stmt_get_col(pdo_stmt_t *stmt, int colno, zval *zv, enum pd
 	LPBYTE data;
 	DBCHAR *tmp_data;
 	DBINT data_len, tmp_data_len;
+
+	dbsetuserdata(H->link, (BYTE*) &S->err);
 
 	coltype = dbcoltype(H->link, colno+1);
 	data = dbdata(H->link, colno+1);
@@ -473,13 +480,15 @@ static int pdo_dblib_stmt_get_column_meta(pdo_stmt_t *stmt, zend_long colno, zva
 		return FAILURE;
 	}
 
-	array_init(return_value);
+	dbsetuserdata(H->link, (BYTE*) &S->err);
 
 	dbtypeinfo = dbcoltypeinfo(H->link, colno+1);
 
 	if(!dbtypeinfo) return FAILURE;
 
 	coltype = dbcoltype(H->link, colno+1);
+
+	array_init(return_value);
 
 	add_assoc_long(return_value, "max_length", dbcollen(H->link, colno+1) );
 	add_assoc_long(return_value, "precision", (int) dbtypeinfo->precision );

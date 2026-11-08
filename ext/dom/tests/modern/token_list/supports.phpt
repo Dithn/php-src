@@ -1,0 +1,18 @@
+--TEST--
+TokenList: supports
+--EXTENSIONS--
+dom
+--FILE--
+<?php
+
+$dom = DOM\XMLDocument::createFromString('<root class="a b c"><child/></root>');
+$element = $dom->documentElement;
+try {
+    $element->classList->supports('a');
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+
+?>
+--EXPECT--
+TypeError: Attribute "class" does not define any supported tokens

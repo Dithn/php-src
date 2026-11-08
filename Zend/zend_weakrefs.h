@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: krakjoe@php.net                                             |
    +----------------------------------------------------------------------+
@@ -41,6 +39,12 @@ static zend_always_inline void *zend_weakrefs_hash_add_ptr(HashTable *ht, zend_o
 		return NULL;
 	}
 }
+ZEND_API void zend_weakrefs_hash_clean(HashTable *ht);
+static zend_always_inline void zend_weakrefs_hash_destroy(HashTable *ht) {
+	zend_weakrefs_hash_clean(ht);
+	ZEND_ASSERT(zend_hash_num_elements(ht) == 0);
+	zend_hash_destroy(ht);
+}
 
 /* Because php uses the raw numbers as a hash function, raw pointers will lead to hash collisions.
  * We have a guarantee that the lowest ZEND_MM_ALIGNED_OFFSET_LOG2 bits of a pointer are zero.
@@ -61,6 +65,12 @@ static zend_always_inline zend_object *zend_weakref_key_to_object(zend_ulong key
 {
 	return (zend_object *) (((uintptr_t) key) << ZEND_MM_ALIGNMENT_LOG2);
 }
+
+HashTable *zend_weakmap_get_gc(zend_object *object, zval **table, int *n);
+HashTable *zend_weakmap_get_key_entry_gc(zend_object *object, zval **table, int *n);
+HashTable *zend_weakmap_get_entry_gc(zend_object *object, zval **table, int *n);
+HashTable *zend_weakmap_get_object_key_entry_gc(zend_object *object, zval **table, int *n);
+HashTable *zend_weakmap_get_object_entry_gc(zend_object *object, zval **table, int *n);
 
 END_EXTERN_C()
 

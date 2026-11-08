@@ -1,16 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
 */
 
@@ -61,10 +57,7 @@ static const char *rcsid = "$OpenBSD: strlcat.c,v 1.17 2016/10/14 18:19:04 dtuck
  * Returns strlen(src) + MIN(siz, strlen(initial dst).
  * If retval >= siz, truncation occurred.
  */
-PHPAPI size_t php_strlcat(dst, src, siz)
-	char *dst;
-	const char *src;
-	size_t siz;
+PHPAPI size_t php_strlcat(char *dst, const char *src, size_t siz)
 {
 	const char *d = dst;
 	const char *s = src;

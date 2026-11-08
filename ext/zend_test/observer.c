@@ -1,16 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
 */
 
@@ -18,8 +14,11 @@
 #include "php_test.h"
 #include "observer.h"
 #include "zend_observer.h"
+#include "zend_extensions.h"
 #include "zend_smart_str.h"
 #include "ext/standard/php_var.h"
+#include "zend_generators.h"
+#include "zend_exceptions.h"
 
 static zend_observer_fcall_handlers observer_fcall_init(zend_execute_data *execute_data);
 
@@ -39,7 +38,7 @@ static void observer_set_user_opcode_handler(const char *opcode_names, user_opco
 	while (1) {
 		if (*e == ' ' || *e == ',' || *e == '\0') {
 			if (s) {
-				zend_uchar opcode = zend_get_opcode_id(s, e - s);
+				uint8_t opcode = zend_get_opcode_id(s, e - s);
 				if (opcode <= ZEND_VM_LAST_OPCODE) {
 					zend_set_user_opcode_handler(opcode, handler);
 				} else {
@@ -61,14 +60,27 @@ static void observer_set_user_opcode_handler(const char *opcode_names, user_opco
 
 static void observer_show_opcode(zend_execute_data *execute_data)
 {
-	if (!ZT_G(observer_show_opcode)) {
+	if (!ZT_G(observer_show_opcode) || !ZEND_USER_CODE(EX(func)->type)) {
 		return;
 	}
 	php_printf("%*s<!-- opcode: '%s' -->\n", 2 * ZT_G(observer_nesting_depth), "", zend_get_opcode_name(EX(opline)->opcode));
 }
 
+static inline void assert_observer_opline(zend_execute_data *execute_data) {
+	ZEND_ASSERT(!ZEND_USER_CODE(EX(func)->type) ||
+		(EX(opline) >= EX(func)->op_array.opcodes && EX(opline) < EX(func)->op_array.opcodes + EX(func)->op_array.last) ||
+		(EX(opline) >= EG(exception_op) && EX(opline) < EG(exception_op) + 3));
+}
+
 static void observer_begin(zend_execute_data *execute_data)
 {
+	assert_observer_opline(execute_data);
+
+	if (ZT_G(observer_set_vm_interrupt_on_begin)
+	 || ZT_G(observer_set_vm_interrupt_on_begin_without_callback)) {
+		atomic_store(&EG(vm_interrupt), true);
+	}
+
 	if (!ZT_G(observer_show_output)) {
 		return;
 	}
@@ -112,6 +124,13 @@ static void get_retval_info(zval *retval, smart_str *buf)
 
 static void observer_end(zend_execute_data *execute_data, zval *retval)
 {
+	assert_observer_opline(execute_data);
+
+	if (ZT_G(observer_set_vm_interrupt_on_end) && !EG(exception)) {
+		ZT_G(observer_throw_on_vm_interrupt) = true;
+		atomic_store(&EG(vm_interrupt), true);
+	}
+
 	if (!ZT_G(observer_show_output)) {
 		return;
 	}
@@ -135,6 +154,19 @@ static void observer_end(zend_execute_data *execute_data, zval *retval)
 	}
 }
 
+static void (*zend_test_prev_interrupt_function)(zend_execute_data *execute_data);
+static void zend_test_interrupt_function(zend_execute_data *execute_data)
+{
+	if (zend_test_prev_interrupt_function) {
+		zend_test_prev_interrupt_function(execute_data);
+	}
+
+	if (ZT_G(observer_throw_on_vm_interrupt)) {
+		ZT_G(observer_throw_on_vm_interrupt) = false;
+		zend_throw_exception(NULL, "VM interrupt", 0);
+	}
+}
+
 static void observer_show_init(zend_function *fbc)
 {
 	if (fbc->common.function_name) {
@@ -144,7 +176,7 @@ static void observer_show_init(zend_function *fbc)
 			php_printf("%*s<!-- init %s() -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->common.function_name));
 		}
 	} else {
-		php_printf("%*s<!-- init '%s' -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->op_array.filename));
+		php_printf("%*s<!-- init '%s' -->\n", 2 * ZT_G(observer_nesting_depth), "", fbc->op_array.filename ? ZSTR_VAL(fbc->op_array.filename) : "[no active file]");
 	}
 }
 
@@ -153,6 +185,11 @@ static void observer_show_init_backtrace(zend_execute_data *execute_data)
 	zend_execute_data *ex = execute_data;
 	php_printf("%*s<!--\n", 2 * ZT_G(observer_nesting_depth), "");
 	do {
+		if (UNEXPECTED(!ex->func)) {
+			ex = zend_generator_check_placeholder_frame(ex);
+			ZEND_ASSERT(ex->func);
+		}
+
 		zend_function *fbc = ex->func;
 		int indent = 2 * ZT_G(observer_nesting_depth) + 4;
 		if (fbc->common.function_name) {
@@ -162,7 +199,7 @@ static void observer_show_init_backtrace(zend_execute_data *execute_data)
 				php_printf("%*s%s()\n", indent, "", ZSTR_VAL(fbc->common.function_name));
 			}
 		} else {
-			php_printf("%*s{main} %s\n", indent, "", ZSTR_VAL(fbc->op_array.filename));
+			php_printf("%*s{main} %s\n", indent, "", fbc->op_array.filename ? ZSTR_VAL(fbc->op_array.filename) : "[no active file]");
 		}
 	} while ((ex = ex->prev_execute_data) != NULL);
 	php_printf("%*s-->\n", 2 * ZT_G(observer_nesting_depth), "");
@@ -184,7 +221,7 @@ static zend_observer_fcall_handlers observer_fcall_init(zend_execute_data *execu
 	} else if (fbc->common.function_name) {
 		if (ZT_G(observer_observe_functions)) {
 			return (zend_observer_fcall_handlers){observer_begin, observer_end};
-		} else if (ZT_G(observer_observe_function_names) && zend_hash_exists(ZT_G(observer_observe_function_names), fbc->common.function_name)) {
+		} else if (zend_hash_exists(ZT_G(observer_observe_function_names), fbc->common.function_name)) {
 			return (zend_observer_fcall_handlers){observer_begin, observer_end};
 		}
 	} else {
@@ -256,22 +293,102 @@ static void fiber_suspend_observer(zend_fiber_context *from, zend_fiber_context 
 	}
 }
 
+void declared_function_observer(zend_op_array *op_array, zend_string *name) {
+	if (ZT_G(observer_observe_declaring)) {
+		php_printf("%*s<!-- declared function '%s' -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(name));
+	}
+}
+
+void declared_class_observer(zend_class_entry *ce, zend_string *name) {
+	if (ZT_G(observer_observe_declaring)) {
+		php_printf("%*s<!-- declared class '%s' -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(name));
+	}
+}
+
+static void (*zend_test_prev_execute_internal)(zend_execute_data *execute_data, zval *return_value);
+static void zend_test_execute_internal(zend_execute_data *execute_data, zval *return_value) {
+	zend_function *fbc = execute_data->func;
+
+	ZEND_ASSERT(!ZEND_USER_CODE(fbc->type));
+
+	if (fbc->common.function_name) {
+		if (fbc->common.scope) {
+			php_printf("%*s<!-- internal enter %s::%s() -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->common.scope->name), ZSTR_VAL(fbc->common.function_name));
+		} else {
+			php_printf("%*s<!-- internal enter %s() -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->common.function_name));
+		}
+	}
+
+	ZT_G(observer_nesting_depth)++;
+
+	if (zend_test_prev_execute_internal) {
+		zend_test_prev_execute_internal(execute_data, return_value);
+	} else {
+		fbc->internal_function.handler(execute_data, return_value);
+	}
+
+	ZT_G(observer_nesting_depth)--;
+
+	if (fbc->common.function_name) {
+		if (EG(exception)) {
+			php_printf("%*s<!-- Exception: %s -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(EG(exception)->ce->name));
+		}
+
+		smart_str retval_info = {0};
+		get_retval_info(return_value, &retval_info);
+		if (fbc->common.scope) {
+			php_printf("%*s<!-- internal leave %s::%s()%s -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->common.scope->name), ZSTR_VAL(fbc->common.function_name), retval_info.s ? ZSTR_VAL(retval_info.s) : "");
+		} else {
+			php_printf("%*s<!-- internal leave %s()%s -->\n", 2 * ZT_G(observer_nesting_depth), "", ZSTR_VAL(fbc->common.function_name), retval_info.s ? ZSTR_VAL(retval_info.s) : "");
+		}
+		smart_str_free(&retval_info);
+	}
+}
+
 static ZEND_INI_MH(zend_test_observer_OnUpdateCommaList)
 {
-	zend_array **p = (zend_array **) ZEND_INI_GET_ADDR();
-	if (*p) {
-		zend_hash_release(*p);
+	zend_array **p = ZEND_INI_GET_ADDR();
+	zend_string *funcname;
+	zend_function *func;
+	if (!ZT_G(observer_enabled)) {
+		return FAILURE;
 	}
-	*p = NULL;
+	if (stage != PHP_INI_STAGE_STARTUP && stage != PHP_INI_STAGE_ACTIVATE && stage != PHP_INI_STAGE_DEACTIVATE && stage != PHP_INI_STAGE_SHUTDOWN) {
+		ZEND_HASH_FOREACH_STR_KEY(*p, funcname) {
+			if ((func = zend_hash_find_ptr(EG(function_table), funcname))
+					&& RUN_TIME_CACHE(&func->common)) {
+				void *old_handler;
+				zend_observer_remove_begin_handler(func, observer_begin, (zend_observer_fcall_begin_handler *)&old_handler);
+				zend_observer_remove_end_handler(func, observer_end, (zend_observer_fcall_end_handler *)&old_handler);
+			}
+		} ZEND_HASH_FOREACH_END();
+	}
+	zend_hash_clean(*p);
 	if (new_value && ZSTR_LEN(new_value)) {
-		*p = malloc(sizeof(HashTable));
-		_zend_hash_init(*p, 8, ZVAL_PTR_DTOR, 1);
 		const char *start = ZSTR_VAL(new_value), *ptr;
 		while ((ptr = strchr(start, ','))) {
-			zend_hash_str_add_empty_element(*p, start, ptr - start);
+			zend_string *str = zend_string_init(start, ptr - start, 1);
+			GC_MAKE_PERSISTENT_LOCAL(str);
+			zend_hash_add_empty_element(*p, str);
+			zend_string_release(str);
 			start = ptr + 1;
 		}
-		zend_hash_str_add_empty_element(*p, start, ZSTR_VAL(new_value) + ZSTR_LEN(new_value) - start);
+		zend_string *str = zend_string_init(start, ZSTR_VAL(new_value) + ZSTR_LEN(new_value) - start, 1);
+		GC_MAKE_PERSISTENT_LOCAL(str);
+		zend_hash_add_empty_element(*p, str);
+		zend_string_release(str);
+		if (stage != PHP_INI_STAGE_STARTUP && stage != PHP_INI_STAGE_ACTIVATE && stage != PHP_INI_STAGE_DEACTIVATE && stage != PHP_INI_STAGE_SHUTDOWN) {
+			ZEND_HASH_FOREACH_STR_KEY(*p, funcname) {
+				if ((func = zend_hash_find_ptr(EG(function_table), funcname))
+						&& RUN_TIME_CACHE(&func->common) && *ZEND_OBSERVER_DATA(func)) {
+					void *old_handler;
+					zend_observer_remove_begin_handler(func, observer_begin, (zend_observer_fcall_begin_handler *)&old_handler);
+					zend_observer_remove_end_handler(func, observer_end, (zend_observer_fcall_end_handler *)&old_handler);
+					zend_observer_add_begin_handler(func, observer_begin);
+					zend_observer_add_end_handler(func, observer_end);
+				}
+			} ZEND_HASH_FOREACH_END();
+		}
 	}
 	return SUCCESS;
 }
@@ -282,15 +399,21 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_BOOLEAN("zend_test.observer.observe_all", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_observe_all, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.observe_includes", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_observe_includes, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.observe_functions", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_observe_functions, zend_zend_test_globals, zend_test_globals)
-	STD_PHP_INI_ENTRY("zend_test.observer.observe_function_names", "", PHP_INI_SYSTEM, zend_test_observer_OnUpdateCommaList, observer_observe_function_names, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.observe_declaring", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_observe_declaring, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_ENTRY("zend_test.observer.observe_function_names", "", PHP_INI_ALL, zend_test_observer_OnUpdateCommaList, observer_observe_function_names, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.show_return_type", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_show_return_type, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.show_return_value", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_show_return_value, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.show_init_backtrace", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_show_init_backtrace, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.show_opcode", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_show_opcode, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_ENTRY("zend_test.observer.show_opcode_in_user_handler", "", PHP_INI_SYSTEM, OnUpdateString, observer_show_opcode_in_user_handler, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.set_vm_interrupt_on_begin", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_set_vm_interrupt_on_begin, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.set_vm_interrupt_on_begin_without_callback", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_set_vm_interrupt_on_begin_without_callback, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.set_vm_interrupt_on_end", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_set_vm_interrupt_on_end, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.fiber_init", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_fiber_init, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.fiber_switch", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_fiber_switch, zend_zend_test_globals, zend_test_globals)
 	STD_PHP_INI_BOOLEAN("zend_test.observer.fiber_destroy", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_fiber_destroy, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.execute_internal", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_execute_internal, zend_zend_test_globals, zend_test_globals)
+	STD_PHP_INI_BOOLEAN("zend_test.observer.reserve_op_array_handle", "0", PHP_INI_SYSTEM, OnUpdateBool, observer_reserve_op_array_handle, zend_zend_test_globals, zend_test_globals)
 PHP_INI_END()
 
 void zend_test_observer_init(INIT_FUNC_ARGS)
@@ -299,6 +422,9 @@ void zend_test_observer_init(INIT_FUNC_ARGS)
 	if (type != MODULE_TEMPORARY) {
 		REGISTER_INI_ENTRIES();
 		if (ZT_G(observer_enabled)) {
+			if (ZT_G(observer_reserve_op_array_handle)) {
+				zend_get_op_array_extension_handle("zend_test");
+			}
 			zend_observer_fcall_register(observer_fcall_init);
 		}
 	} else {
@@ -315,16 +441,40 @@ void zend_test_observer_init(INIT_FUNC_ARGS)
 		zend_observer_fiber_switch_register(fiber_enter_observer);
 		zend_observer_fiber_switch_register(fiber_suspend_observer);
 		zend_observer_fiber_destroy_register(fiber_destroy_observer);
+
+		zend_observer_function_declared_register(declared_function_observer);
+		zend_observer_class_linked_register(declared_class_observer);
+	}
+
+	if (ZT_G(observer_execute_internal)) {
+		zend_test_prev_execute_internal = zend_execute_internal;
+		zend_execute_internal = zend_test_execute_internal;
+	}
+
+	if (ZT_G(observer_set_vm_interrupt_on_begin) || ZT_G(observer_set_vm_interrupt_on_end)) {
+		zend_test_prev_interrupt_function = zend_interrupt_function;
+		zend_interrupt_function = zend_test_interrupt_function;
 	}
 }
 
 void zend_test_observer_shutdown(SHUTDOWN_FUNC_ARGS)
 {
+	if (zend_interrupt_function == zend_test_interrupt_function) {
+		zend_interrupt_function = zend_test_prev_interrupt_function;
+		zend_test_prev_interrupt_function = NULL;
+	}
+
 	if (type != MODULE_TEMPORARY) {
 		UNREGISTER_INI_ENTRIES();
 	}
+}
 
-	if (ZT_G(observer_observe_function_names)) {
-		zend_hash_release(ZT_G(observer_observe_function_names));
-	}
+void zend_test_observer_ginit(zend_zend_test_globals *zend_test_globals) {
+	zend_test_globals->observer_observe_function_names = malloc(sizeof(HashTable));
+	_zend_hash_init(zend_test_globals->observer_observe_function_names, 8, ZVAL_PTR_DTOR, 1);
+	GC_MAKE_PERSISTENT_LOCAL(zend_test_globals->observer_observe_function_names);
+}
+
+void zend_test_observer_gshutdown(zend_zend_test_globals *zend_test_globals) {
+	zend_hash_release(zend_test_globals->observer_observe_function_names);
 }

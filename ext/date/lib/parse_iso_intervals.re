@@ -27,21 +27,12 @@
 
 #include <ctype.h>
 
-#if defined(_MSC_VER)
-# define strtoll(s, f, b) _atoi64(s)
-#elif !defined(HAVE_STRTOLL)
-# if defined(HAVE_ATOLL)
-#  define strtoll(s, f, b) atoll(s)
-# else
-#  define strtoll(s, f, b) strtol(s, f, b)
-# endif
-#endif
-
 #define EOI      257
 
 #define TIMELIB_PERIOD  260
 #define TIMELIB_ISO_DATE 261
 #define TIMELIB_ERROR   999
+#define TIMELIB_MAX_ERRORS 1000
 
 typedef unsigned char uchar;
 
@@ -86,8 +77,12 @@ typedef struct _Scanner {
 	int have_end_date;
 } Scanner;
 
-static void add_error(Scanner *s, char *error)
+static void add_error(Scanner *s, const char *error)
 {
+	if (s->errors->error_count >= TIMELIB_MAX_ERRORS) {
+		return;
+	}
+
 	s->errors->error_count++;
 	s->errors->error_messages = timelib_realloc(s->errors->error_messages, s->errors->error_count * sizeof(timelib_error_message));
 	s->errors->error_messages[s->errors->error_count - 1].position = s->tok ? s->tok - s->str : 0;
@@ -343,10 +338,10 @@ void timelib_strtointerval(const char *s, size_t len,
 	in.errors->error_messages = NULL;
 
 	if (len > 0) {
-		while (isspace(*s) && s < e) {
+		while (isspace((unsigned char)*s) && s < e) {
 			s++;
 		}
-		while (isspace(*e) && e > s) {
+		while (isspace((unsigned char)*e) && e > s) {
 			e--;
 		}
 	}

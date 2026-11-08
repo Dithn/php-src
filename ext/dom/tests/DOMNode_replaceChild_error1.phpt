@@ -14,8 +14,9 @@ $real_parent->appendChild($child1);
 $parent->appendChild($child2);
 try {
 	$parent->replaceChild($child3, $child1);
-} catch (DOMException $e) {
-	echo "DOMException: " . $e->getMessage();
+} catch (Throwable $e) {
+	echo $e::class, ': ', $e->getMessage(), "\n";
 }
+?>
 --EXPECT--
 DOMException: Not Found Error

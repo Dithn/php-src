@@ -2,8 +2,65 @@
 
 /** @generate-class-entries */
 
-class GMP
+/**
+ * @var int
+ * @cvalue GMP_ROUND_ZERO
+ */
+const GMP_ROUND_ZERO = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_ROUND_PLUSINF
+ */
+const GMP_ROUND_PLUSINF = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_ROUND_MINUSINF
+ */
+const GMP_ROUND_MINUSINF = UNKNOWN;
+
+#ifdef mpir_version
+/**
+ * @var string
+ * @cvalue GMP_MPIR_VERSION_STRING
+ */
+const GMP_MPIR_VERSION = UNKNOWN;
+#endif
+/**
+ * @var string
+ * @cvalue GMP_VERSION_STRING
+ */
+const GMP_VERSION = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue GMP_MSW_FIRST
+ */
+const GMP_MSW_FIRST = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_LSW_FIRST
+ */
+const GMP_LSW_FIRST = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_LITTLE_ENDIAN
+ */
+const GMP_LITTLE_ENDIAN = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_BIG_ENDIAN
+ */
+const GMP_BIG_ENDIAN = UNKNOWN;
+/**
+ * @var int
+ * @cvalue GMP_NATIVE_ENDIAN
+ */
+const GMP_NATIVE_ENDIAN = UNKNOWN;
+
+final class GMP
 {
+    public function __construct(int|string $num = 0, int $base = 0) {}
+
     public function __serialize(): array {}
 
     public function __unserialize(array $data): void {}
@@ -68,6 +125,10 @@ function gmp_pow(GMP|int|string $num, int $exponent): GMP {}
 
 function gmp_powm(GMP|int|string $num, GMP|int|string $exponent, GMP|int|string $modulus): GMP {}
 
+#ifdef HAVE___GMPZ_POWM_SEC
+function gmp_powm_sec(GMP|int|string $num, GMP|int|string $exponent, GMP|int|string $modulus): GMP {}
+#endif
+
 function gmp_perfect_square(GMP|int|string $num): bool {}
 
 function gmp_perfect_power(GMP|int|string $num): bool {}
@@ -125,5 +186,10 @@ function gmp_popcount(GMP|int|string $num): int {}
 function gmp_hamdist(GMP|int|string $num1, GMP|int|string $num2): int {}
 
 function gmp_nextprime(GMP|int|string $num): GMP {}
+
+#ifdef HAVE___GMPZ_PREVPRIME
+/** @param bool $definitely_prime */
+function gmp_prevprime(GMP|int|string $num, &$definitely_prime = null): GMP {}
+#endif
 
 function gmp_binomial(GMP|int|string $n, int $k): GMP {}

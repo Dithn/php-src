@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Tsukada Takuya <tsukada@fminn.nagano.nagano.jp>              |
    +----------------------------------------------------------------------+
@@ -45,6 +43,8 @@ typedef void OnigMatchParam;
 #endif
 
 ZEND_EXTERN_MODULE_GLOBALS(mbstring)
+
+char php_mb_oniguruma_version[256];
 
 struct _zend_mb_regex_globals {
 	OnigEncoding default_mbctype;
@@ -110,13 +110,11 @@ void php_mb_regex_globals_free(zend_mb_regex_globals *pglobals)
 /* {{{ PHP_MINIT_FUNCTION(mb_regex) */
 PHP_MINIT_FUNCTION(mb_regex)
 {
-	char version[256];
-
 	onig_init();
 
-	snprintf(version, sizeof(version), "%d.%d.%d",
+	snprintf(php_mb_oniguruma_version, sizeof(php_mb_oniguruma_version), "%d.%d.%d",
 		ONIGURUMA_VERSION_MAJOR, ONIGURUMA_VERSION_MINOR, ONIGURUMA_VERSION_TEENY);
-	REGISTER_STRING_CONSTANT("MB_ONIGURUMA_VERSION", version, CONST_CS | CONST_PERSISTENT);
+
 	return SUCCESS;
 }
 /* }}} */
@@ -409,8 +407,13 @@ int php_mb_regex_set_mbctype(const char *encname)
 	if (mbctype == ONIG_ENCODING_UNDEF) {
 		return FAILURE;
 	}
+	const mbfl_encoding *mbfl_enc = mbfl_name2encoding(encname);
+	if (mbfl_enc == NULL) {
+		/* Encoding supported by Oniguruma but not by mbfl */
+		return FAILURE;
+	}
 	MBREX(current_mbctype) = mbctype;
-	MBREX(current_mbctype_mbfl_encoding) = mbfl_name2encoding(encname);
+	MBREX(current_mbctype_mbfl_encoding) = mbfl_enc;
 	return SUCCESS;
 }
 /* }}} */
@@ -476,6 +479,10 @@ static php_mb_regex_t *php_mbregex_compile_pattern(const char *pattern, size_t p
 		if (rc == MBREX(search_re)) {
 			/* reuse the new rc? see bug #72399 */
 			MBREX(search_re) = NULL;
+			if (MBREX(search_regs) != NULL) {
+				onig_region_free(MBREX(search_regs), 1);
+				MBREX(search_regs) = NULL;
+			}
 		}
 		zend_hash_str_update_ptr(&MBREX(ht_rc), (char *)pattern, patlen, retval);
 	} else {
@@ -689,7 +696,7 @@ mb_regex_groups_iter(const OnigUChar* name, const OnigUChar* name_end, int ngrou
 	gn = onig_name_to_backref_number(reg, name, name_end, args->region);
 	beg = args->region->beg[gn];
 	end = args->region->end[gn];
-	if (beg >= 0 && beg < end && end <= args->search_len) {
+	if (beg >= 0 && beg < end && ((size_t)end <= args->search_len)) {
 		add_assoc_stringl_ex(args->groups, (char *)name, name_end - name, &args->search_str[beg], end - beg);
 	} else {
 		add_assoc_bool_ex(args->groups, (char *)name, name_end - name, 0);
@@ -721,6 +728,10 @@ static inline void mb_regex_substitute(
 	eos = replace + replace_len;
 
 	while (p < eos) {
+		if (ZEND_HAS_OOM()) {
+			return;
+		}
+
 		clen = (int) php_mb_mbchar_bytes(p, enc);
 		if (clen != 1 || p == eos || p[0] != '\\') {
 			/* skip anything that's not an ascii backslash */
@@ -762,7 +773,7 @@ static inline void mb_regex_substitute(
 				clen = (int) php_mb_mbchar_bytes(++p, enc);
 				if (clen != 1 || p == eos || (p[0] != '<' && p[0] != '\'')) {
 					/* not a backref delimiter */
-					p += clen;
+					p = MIN(p + clen, eos);
 					smart_str_appendl(pbuf, sp, p - sp);
 					continue;
 				}
@@ -779,15 +790,16 @@ static inline void mb_regex_substitute(
 						continue;
 					}
 					if (name_end[0] == delim) break;
-					if (maybe_num && !isdigit(name_end[0])) maybe_num = 0;
+					if (maybe_num && !isdigit((unsigned char)name_end[0])) maybe_num = 0;
 					name_end++;
 				}
-				p = name_end + 1;
 				if (name_end - name < 1 || name_end >= eos) {
 					/* the backref was empty or we failed to find the end delimiter */
+					p = MIN(name_end + 1, eos);
 					smart_str_appendl(pbuf, sp, p - sp);
 					continue;
 				}
+				p = name_end + 1;
 				/* we have either a name or a number */
 				if (maybe_num) {
 					if (!onig_noname_group_capture_is_active(regexp)) {
@@ -900,7 +912,7 @@ static void _php_mb_regex_ereg_exec(INTERNAL_FUNCTION_PARAMETERS, int icase)
 	}
 
 	if (arg_pattern_len == 0) {
-		zend_argument_value_error(1, "must not be empty");
+		zend_argument_must_not_be_empty_error(1);
 		RETURN_THROWS();
 	}
 
@@ -1103,15 +1115,9 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 				if (zend_call_function(&arg_replace_fci, &arg_replace_fci_cache) == SUCCESS &&
 						!Z_ISUNDEF(retval)) {
 					convert_to_string(&retval);
-					smart_str_appendl(&out_buf, Z_STRVAL(retval), Z_STRLEN(retval));
+					smart_str_append(&out_buf, Z_STR(retval));
 					smart_str_free(&eval_buf);
 					zval_ptr_dtor(&retval);
-				} else {
-					if (!EG(exception)) {
-						zend_throw_error(NULL, "Unable to call custom replacement function");
-						zval_ptr_dtor(&subpats);
-						RETURN_THROWS();
-					}
 				}
 				zval_ptr_dtor(&subpats);
 			}
@@ -1144,13 +1150,10 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 
 	if (err <= -2) {
 		smart_str_free(&out_buf);
-		RETVAL_FALSE;
-	} else if (out_buf.s) {
-		smart_str_0(&out_buf);
-		RETVAL_STR(out_buf.s);
-	} else {
-		RETVAL_EMPTY_STRING();
+		RETURN_FALSE;
 	}
+
+	RETURN_STR(smart_str_extract(&out_buf));
 }
 /* }}} */
 
@@ -1187,7 +1190,7 @@ PHP_FUNCTION(mb_split)
 	size_t string_len;
 
 	int err;
-	zend_long count = -1;
+	zend_ulong count = -1; /* unsigned, it's a limit and we want to prevent signed overflow */
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ss|l", &arg_pattern, &arg_pattern_len, &string, &string_len, &count) == FAILURE) {
 		RETURN_THROWS();
@@ -1234,6 +1237,10 @@ PHP_FUNCTION(mb_split)
 			pos++;
 		}
 		onig_region_free(regs, 0);
+		if (ZEND_HAS_OOM()) {
+			err = -2;
+			break;
+		}
 	}
 
 	onig_region_free(regs, 1);
@@ -1312,11 +1319,7 @@ PHP_FUNCTION(mb_ereg_match)
 	/* match */
 	err = onig_match_with_param(re, (OnigUChar *)string, (OnigUChar *)(string + string_len), (OnigUChar *)string, NULL, 0, mp);
 	onig_free_match_param(mp);
-	if (err >= 0) {
-		RETVAL_TRUE;
-	} else {
-		RETVAL_FALSE;
-	}
+	RETURN_BOOL(err >= 0);
 }
 /* }}} */
 
@@ -1471,7 +1474,7 @@ PHP_FUNCTION(mb_ereg_search_init)
 	}
 
 	if (arg_pattern && arg_pattern_len == 0) {
-		zend_argument_value_error(2, "must not be empty");
+		zend_argument_must_not_be_empty_error(2);
 		RETURN_THROWS();
 	}
 
@@ -1519,9 +1522,7 @@ PHP_FUNCTION(mb_ereg_search_getregs)
 	int beg, end;
 	OnigUChar *str;
 
-	if (zend_parse_parameters_none() == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	if (MBREX(search_regs) != NULL && Z_TYPE(MBREX(search_str)) == IS_STRING) {
 		array_init(return_value);
@@ -1557,9 +1558,7 @@ PHP_FUNCTION(mb_ereg_search_getregs)
 /* {{{ Get search start position */
 PHP_FUNCTION(mb_ereg_search_getpos)
 {
-	if (zend_parse_parameters_none() == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	RETVAL_LONG(MBREX(search_pos));
 }

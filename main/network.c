@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Stig Venaas <venaas@uninett.no>                              |
    | Streams work by Wez Furlong <wez@thebrainroom.com>                   |
@@ -25,16 +23,11 @@
 
 #ifdef PHP_WIN32
 # include <Ws2tcpip.h>
-# include "win32/inet.h"
 # include "win32/winutil.h"
-# define O_RDONLY _O_RDONLY
-# include "win32/param.h"
-#else
-#include <sys/param.h>
 #endif
 
 #include <sys/types.h>
-#if HAVE_SYS_SOCKET_H
+#ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
 
@@ -45,9 +38,9 @@
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
-#if HAVE_POLL_H
+#ifdef HAVE_POLL_H
 #include <poll.h>
-#elif HAVE_SYS_POLL_H
+#elif defined(HAVE_SYS_POLL_H)
 #include <sys/poll.h>
 #endif
 
@@ -55,13 +48,9 @@
 #ifndef PHP_WIN32
 #include <netinet/in.h>
 #include <netdb.h>
-#if HAVE_ARPA_INET_H
+#ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
-#endif
-
-#ifndef HAVE_INET_ATON
-int inet_aton(const char *, struct in_addr *);
 #endif
 
 #include "php_network.h"
@@ -82,7 +71,7 @@ int inet_aton(const char *, struct in_addr *);
 # define SOCK_CONN_ERR SOCKET_ERROR
 # define PHP_TIMEOUT_ERROR_VALUE		WSAETIMEDOUT
 
-#if HAVE_IPV6
+#ifdef HAVE_IPV6
 const struct in6_addr in6addr_any = {0}; /* IN6ADDR_ANY_INIT; */
 #endif
 
@@ -92,11 +81,8 @@ const struct in6_addr in6addr_any = {0}; /* IN6ADDR_ANY_INIT; */
 # define PHP_TIMEOUT_ERROR_VALUE		ETIMEDOUT
 #endif
 
-#if HAVE_GETADDRINFO
-#ifdef HAVE_GAI_STRERROR
-#  define PHP_GAI_STRERROR(x) (gai_strerror(x))
-#else
-#  define PHP_GAI_STRERROR(x) (php_gai_strerror(x))
+#ifdef HAVE_GETADDRINFO
+# if !defined(PHP_WIN32) && !defined(HAVE_GAI_STRERROR)
 /* {{{ php_gai_strerror */
 static const char *php_gai_strerror(int code)
 {
@@ -118,7 +104,9 @@ static const char *php_gai_strerror(int code)
 		{EAI_NONAME, "Name or service not known"},
 		{EAI_SERVICE, "Servname not supported for ai_socktype"},
 		{EAI_SOCKTYPE, "ai_socktype not supported"},
+#  ifdef EAI_SYSTEM
 		{EAI_SYSTEM, "System error"},
+#  endif
 		{0, NULL}
 	};
 	int i;
@@ -132,7 +120,7 @@ static const char *php_gai_strerror(int code)
 	return "Unknown error";
 }
 /* }}} */
-#endif
+# endif
 #endif
 
 /* {{{ php_network_freeaddresses */
@@ -155,8 +143,8 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 {
 	struct sockaddr **sap;
 	int n;
-#if HAVE_GETADDRINFO
-# if HAVE_IPV6
+#ifdef HAVE_GETADDRINFO
+# ifdef HAVE_IPV6
 	static int ipv6_borked = -1; /* the way this is used *is* thread safe */
 # endif
 	struct addrinfo hints, *res, *sai;
@@ -168,13 +156,13 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 	if (host == NULL) {
 		return 0;
 	}
-#if HAVE_GETADDRINFO
+#ifdef HAVE_GETADDRINFO
 	memset(&hints, '\0', sizeof(hints));
 
 	hints.ai_family = AF_INET; /* default to regular inet (see below) */
 	hints.ai_socktype = socktype;
 
-# if HAVE_IPV6
+# ifdef HAVE_IPV6
 	/* probe for a working IPv6 stack; even if detected as having v6 at compile
 	 * time, at runtime some stacks are slow to resolve or have other issues
 	 * if they are not correctly configured.
@@ -196,16 +184,26 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 # endif
 
 	if ((n = getaddrinfo(host, NULL, &hints, &res))) {
+# if defined(PHP_WIN32)
+		char *gai_error = php_win32_error_to_msg(n);
+# elif defined(HAVE_GAI_STRERROR)
+		const char *gai_error = gai_strerror(n);
+# else
+		const char *gai_error = php_gai_strerror(n)
+# endif
 		if (error_string) {
 			/* free error string received during previous iteration (if any) */
 			if (*error_string) {
 				zend_string_release_ex(*error_string, 0);
 			}
-			*error_string = strpprintf(0, "php_network_getaddresses: getaddrinfo for %s failed: %s", host, PHP_GAI_STRERROR(n));
+			*error_string = strpprintf(0, "php_network_getaddresses: getaddrinfo for %s failed: %s", host, gai_error);
 			php_error_docref(NULL, E_WARNING, "%s", ZSTR_VAL(*error_string));
 		} else {
-			php_error_docref(NULL, E_WARNING, "php_network_getaddresses: getaddrinfo for %s failed: %s", host, PHP_GAI_STRERROR(n));
+			php_error_docref(NULL, E_WARNING, "php_network_getaddresses: getaddrinfo for %s failed: %s", host, gai_error);
 		}
+# ifdef PHP_WIN32
+		php_win32_error_msg_free(gai_error);
+# endif
 		return 0;
 	} else if (res == NULL) {
 		if (error_string) {
@@ -225,7 +223,7 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 	for (n = 1; (sai = sai->ai_next) != NULL; n++)
 		;
 
-	*sal = safe_emalloc((n + 1), sizeof(*sal), 0);
+	*sal = safe_emalloc((n + 1), sizeof(**sal), 0);
 	sai = res;
 	sap = *sal;
 
@@ -237,11 +235,7 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 
 	freeaddrinfo(res);
 #else
-#ifdef HAVE_INET_PTON
 	if (!inet_pton(AF_INET, host, &in)) {
-#else
-	if (!inet_aton(host, &in)) {
-#endif
 		if(strlen(host) > MAXFQDNLEN) {
 			host_info = NULL;
 			errno = E2BIG;
@@ -264,7 +258,7 @@ PHPAPI int php_network_getaddresses(const char *host, int socktype, struct socka
 		in = *((struct in_addr *) host_info->h_addr);
 	}
 
-	*sal = safe_emalloc(2, sizeof(*sal), 0);
+	*sal = safe_emalloc(2, sizeof(**sal), 0);
 	sap = *sal;
 	*sap = emalloc(sizeof(struct sockaddr_in));
 	(*sap)->sa_family = AF_INET;
@@ -295,6 +289,37 @@ typedef int php_non_blocking_flags_t;
 	 fcntl(sock, F_SETFL, save | O_NONBLOCK)
 #  define RESTORE_SOCKET_BLOCKING_MODE(sock, save) \
 	 fcntl(sock, F_SETFL, save)
+#endif
+
+#ifdef HAVE_GETTIMEOFDAY
+/* Subtract times */
+static inline void sub_times(struct timeval a, struct timeval b, struct timeval *result)
+{
+	result->tv_usec = a.tv_usec - b.tv_usec;
+	if (result->tv_usec < 0L) {
+		a.tv_sec--;
+		result->tv_usec += 1000000L;
+	}
+	result->tv_sec = a.tv_sec - b.tv_sec;
+	if (result->tv_sec < 0L) {
+		result->tv_sec++;
+		result->tv_usec -= 1000000L;
+	}
+}
+
+static inline void php_network_set_limit_time(struct timeval *limit_time,
+		struct timeval *timeout)
+{
+	gettimeofday(limit_time, NULL);
+	const double timeoutmax = (double) PHP_TIMEOUT_ULL_MAX / 1000000.0;
+	ZEND_ASSERT(limit_time->tv_sec < (timeoutmax - timeout->tv_sec));
+	limit_time->tv_sec += timeout->tv_sec;
+	limit_time->tv_usec += timeout->tv_usec;
+	if (limit_time->tv_usec >= 1000000) {
+		limit_time->tv_usec -= 1000000;
+		limit_time->tv_sec++;
+	}
+}
 #endif
 
 /* Connect to a socket using an interruptible connect with optional timeout.
@@ -349,25 +374,53 @@ PHPAPI int php_network_connect_socket(php_socket_t sockfd,
 	 * expected when a connection is actively refused. This way,
 	 * php_pollfd_for will return a mask with POLLOUT if the connection
 	 * is successful and with POLLPRI otherwise. */
-	if ((n = php_pollfd_for(sockfd, POLLOUT|POLLPRI, timeout)) == 0) {
+	int events = POLLOUT|POLLPRI;
 #else
-	if ((n = php_pollfd_for(sockfd, PHP_POLLREADABLE|POLLOUT, timeout)) == 0) {
+	int events = PHP_POLLREADABLE|POLLOUT;
 #endif
-		error = PHP_TIMEOUT_ERROR_VALUE;
+	struct timeval working_timeout;
+#ifdef HAVE_GETTIMEOFDAY
+	struct timeval limit_time, time_now;
+#endif
+	if (timeout) {
+		memcpy(&working_timeout, timeout, sizeof(working_timeout));
+#ifdef HAVE_GETTIMEOFDAY
+		php_network_set_limit_time(&limit_time, &working_timeout);
+#endif
 	}
 
-	if (n > 0) {
-		len = sizeof(error);
-		/*
-		   BSD-derived systems set errno correctly
-		   Solaris returns -1 from getsockopt in case of error
-		   */
-		if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&error, &len) != 0) {
+	while (true) {
+		n = php_pollfd_for(sockfd, events, timeout ? &working_timeout : NULL);
+		if (n < 0) {
+			if (errno == EINTR) {
+#ifdef HAVE_GETTIMEOFDAY
+				if (timeout) {
+					gettimeofday(&time_now, NULL);
+
+					if (!timercmp(&time_now, &limit_time, <)) {
+						/* time limit expired; no need for another poll */
+						error = PHP_TIMEOUT_ERROR_VALUE;
+						break;
+					} else {
+						/* work out remaining time */
+						sub_times(limit_time, time_now, &working_timeout);
+					}
+				}
+#endif
+				continue;
+			}
 			ret = -1;
+		} else if (n == 0) {
+			error = PHP_TIMEOUT_ERROR_VALUE;
+		} else {
+			len = sizeof(error);
+			/* BSD-derived systems set errno correctly.
+			 * Solaris returns -1 from getsockopt in case of error. */
+			if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&error, &len) != 0) {
+				ret = -1;
+			}
 		}
-	} else {
-		/* whoops: sockfd has disappeared */
-		ret = -1;
+		break;
 	}
 
 ok:
@@ -390,28 +443,60 @@ ok:
 }
 /* }}} */
 
-/* {{{ sub_times */
-static inline void sub_times(struct timeval a, struct timeval b, struct timeval *result)
+PHPAPI void php_network_apply_sockvals(php_socket_t sock, const php_sockvals *sockvals)
 {
-	result->tv_usec = a.tv_usec - b.tv_usec;
-	if (result->tv_usec < 0L) {
-		a.tv_sec--;
-		result->tv_usec += 1000000L;
+#ifdef SO_LINGER
+	if (sockvals->mask & PHP_SOCKVAL_SO_LINGER) {
+		unsigned short secs = sockvals->linger > USHRT_MAX
+			? USHRT_MAX : (unsigned short)sockvals->linger;
+		struct linger linger_val = {
+			.l_onoff = (sockvals->linger > 0),
+			.l_linger = sockvals->linger > 0 ? secs : 0
+		};
+#ifdef SO_LINGER_SEC
+		setsockopt(sock, SOL_SOCKET, SO_LINGER_SEC, (char*)&linger_val, sizeof(linger_val));
+#else
+		setsockopt(sock, SOL_SOCKET, SO_LINGER, (char*)&linger_val, sizeof(linger_val));
+#endif
 	}
-	result->tv_sec = a.tv_sec - b.tv_sec;
-	if (result->tv_sec < 0L) {
-		result->tv_sec++;
-		result->tv_usec -= 1000000L;
+#endif
+#if defined(TCP_KEEPIDLE)
+	if (sockvals->mask & PHP_SOCKVAL_TCP_KEEPIDLE) {
+		setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, (char*)&sockvals->keepalive.keepidle, sizeof(sockvals->keepalive.keepidle));
 	}
+#elif defined(TCP_KEEPALIVE)
+	if (sockvals->mask & PHP_SOCKVAL_TCP_KEEPIDLE) {
+		setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sockvals->keepalive.keepidle, sizeof(sockvals->keepalive.keepidle));
+	}
+#endif
+#ifdef TCP_KEEPINTVL
+	if (sockvals->mask & PHP_SOCKVAL_TCP_KEEPINTVL) {
+		setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, (char*)&sockvals->keepalive.keepintvl, sizeof(sockvals->keepalive.keepintvl));
+	}
+#endif
+#ifdef TCP_KEEPCNT
+	if (sockvals->mask & PHP_SOCKVAL_TCP_KEEPCNT) {
+		setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, (char*)&sockvals->keepalive.keepcnt, sizeof(sockvals->keepalive.keepcnt));
+	}
+#endif
+#ifdef SO_RCVBUF
+	if (sockvals->mask & PHP_SOCKVAL_SO_RCVBUF) {
+		setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&sockvals->rcvbuf, sizeof(sockvals->rcvbuf));
+	}
+#endif
+#ifdef SO_SNDBUF
+	if (sockvals->mask & PHP_SOCKVAL_SO_SNDBUF) {
+		setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&sockvals->sndbuf, sizeof(sockvals->sndbuf));
+	}
+#endif
 }
-/* }}} */
 
 /* Bind to a local IP address.
  * Returns the bound socket, or -1 on failure.
  * */
-/* {{{ php_network_bind_socket_to_local_addr */
-php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned port,
-		int socktype, long sockopts, zend_string **error_string, int *error_code
+php_socket_t php_network_bind_socket_to_local_addr_ex(const char *host, unsigned port,
+		int socktype, long sockopts, php_sockvals *sockvals, zend_string **error_string,
+		int *error_code
 		)
 {
 	int num_addrs, n, err = 0;
@@ -431,7 +516,7 @@ php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned po
 		sa = *sal;
 
 		switch (sa->sa_family) {
-#if HAVE_GETADDRINFO && HAVE_IPV6
+#if defined(HAVE_GETADDRINFO) && defined(HAVE_IPV6)
 			case AF_INET6:
 				((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
 				socklen = sizeof(struct sockaddr_in6);
@@ -455,8 +540,13 @@ php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned po
 
 		/* attempt to bind */
 
-#ifdef SO_REUSEADDR
-		setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&sockoptval, sizeof(sockoptval));
+		if (sockopts & STREAM_SOCKOP_SO_REUSEADDR) {
+			setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&sockoptval, sizeof(sockoptval));
+		}
+#ifdef PHP_WIN32
+		else {
+			setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&sockoptval, sizeof(sockoptval));
+		}
 #endif
 #ifdef IPV6_V6ONLY
 		if (sockopts & STREAM_SOCKOP_IPV6_V6ONLY) {
@@ -466,7 +556,13 @@ php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned po
 #endif
 #ifdef SO_REUSEPORT
 		if (sockopts & STREAM_SOCKOP_SO_REUSEPORT) {
+# ifdef SO_REUSEPORT_LB
+			/* Historically, SO_REUSEPORT on FreeBSD predates Linux version, however does not
+			 * involve load balancing grouping thus SO_REUSEPORT_LB is the genuine equivalent.*/
+			setsockopt(sock, SOL_SOCKET, SO_REUSEPORT_LB, (char*)&sockoptval, sizeof(sockoptval));
+# else
 			setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (char*)&sockoptval, sizeof(sockoptval));
+# endif
 		}
 #endif
 #ifdef SO_BROADCAST
@@ -479,6 +575,15 @@ php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned po
 			setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&sockoptval, sizeof(sockoptval));
 		}
 #endif
+#ifdef SO_KEEPALIVE
+		if (sockopts & STREAM_SOCKOP_SO_KEEPALIVE) {
+			setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sockoptval, sizeof(sockoptval));
+		}
+#endif
+
+		if (sockvals != NULL) {
+			php_network_apply_sockvals(sock, sockvals);
+		}
 
 		n = bind(sock, sa, socklen);
 
@@ -506,19 +611,25 @@ bound:
 	return sock;
 
 }
-/* }}} */
 
-PHPAPI int php_network_parse_network_address_with_port(const char *addr, zend_long addrlen, struct sockaddr *sa, socklen_t *sl)
+php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned port,
+		int socktype, long sockopts, zend_string **error_string, int *error_code
+		)
 {
-	char *colon;
+	return php_network_bind_socket_to_local_addr_ex(host, port, socktype, sockopts, NULL, error_string, error_code);
+}
+
+PHPAPI zend_result php_network_parse_network_address_with_port(const char *addr, size_t addrlen, struct sockaddr *sa, socklen_t *sl)
+{
+	const char *colon;
 	char *tmp;
-	int ret = FAILURE;
-	short port;
+	zend_result ret = FAILURE;
+	zend_long port;
 	struct sockaddr_in *in4 = (struct sockaddr_in*)sa;
 	struct sockaddr **psal;
 	int n;
 	zend_string *errstr = NULL;
-#if HAVE_IPV6
+#ifdef HAVE_IPV6
 	struct sockaddr_in6 *in6 = (struct sockaddr_in6*)sa;
 
 	memset(in6, 0, sizeof(struct sockaddr_in6));
@@ -531,21 +642,25 @@ PHPAPI int php_network_parse_network_address_with_port(const char *addr, zend_lo
 		if (!colon || colon[1] != ':') {
 			return FAILURE;
 		}
-		port = atoi(colon + 2);
+		port = ZEND_STRTOL(colon + 2, NULL, 10);
 		addr++;
 	} else {
 		colon = memchr(addr, ':', addrlen);
 		if (!colon) {
 			return FAILURE;
 		}
-		port = atoi(colon + 1);
+		port = ZEND_STRTOL(colon + 1, NULL, 10);
+	}
+
+	if (port < 0 || port > 65535) {
+		return FAILURE;
 	}
 
 	tmp = estrndup(addr, colon - addr);
 
 	/* first, try interpreting the address as a numeric address */
 
-#if HAVE_IPV6 && HAVE_INET_PTON
+#ifdef HAVE_IPV6
 	if (inet_pton(AF_INET6, tmp, &in6->sin6_addr) > 0) {
 		in6->sin6_port = htons(port);
 		in6->sin6_family = AF_INET6;
@@ -554,11 +669,7 @@ PHPAPI int php_network_parse_network_address_with_port(const char *addr, zend_lo
 		goto out;
 	}
 #endif
-#ifdef HAVE_INET_PTON
 	if (inet_pton(AF_INET, tmp, &in4->sin_addr) > 0) {
-#else
-	if (inet_aton(tmp, &in4->sin_addr) > 0) {
-#endif
 		in4->sin_port = htons(port);
 		in4->sin_family = AF_INET;
 		*sl = sizeof(struct sockaddr_in);
@@ -579,7 +690,7 @@ PHPAPI int php_network_parse_network_address_with_port(const char *addr, zend_lo
 
 	/* copy the details from the first item */
 	switch ((*psal)->sa_family) {
-#if HAVE_GETADDRINFO && HAVE_IPV6
+#if defined(HAVE_GETADDRINFO) && defined(HAVE_IPV6)
 		case AF_INET6:
 			*in6 = **(struct sockaddr_in6**)psal;
 			in6->sin6_port = htons(port);
@@ -620,19 +731,13 @@ PHPAPI void php_network_populate_name_from_sockaddr(
 	}
 
 	if (textaddr) {
-#ifdef HAVE_INET_NTOP
 		char abuf[256];
-#endif
 		const char *buf = NULL;
 
 		switch (sa->sa_family) {
 			case AF_INET:
 				/* generally not thread safe, but it *is* thread safe under win32 */
-#ifdef HAVE_INET_NTOP
 				buf = inet_ntop(AF_INET, &((struct sockaddr_in*)sa)->sin_addr, (char *)&abuf, sizeof(abuf));
-#else
-				buf = inet_ntoa(((struct sockaddr_in*)sa)->sin_addr);
-#endif
 				if (buf) {
 					*textaddr = strpprintf(0, "%s:%d",
 						buf, ntohs(((struct sockaddr_in*)sa)->sin_port));
@@ -640,7 +745,7 @@ PHPAPI void php_network_populate_name_from_sockaddr(
 
 				break;
 
-#if HAVE_IPV6 && HAVE_INET_NTOP
+#ifdef HAVE_IPV6
 			case AF_INET6:
 				buf = (char*)inet_ntop(sa->sa_family, &((struct sockaddr_in6*)sa)->sin6_addr, (char *)&abuf, sizeof(abuf));
 				if (buf) {
@@ -722,15 +827,22 @@ PHPAPI int php_network_get_sock_name(php_socket_t sock,
  * version of the address will be emalloc'd and returned.
  * */
 
-/* {{{ php_network_accept_incoming */
-PHPAPI php_socket_t php_network_accept_incoming(php_socket_t srvsock,
+ /* Accept a client connection from a server socket,
+ * using an optional timeout.
+ * Returns the peer address in addr/addrlen (it will emalloc
+ * these, so be sure to efree the result).
+ * If you specify textaddr, a text-printable
+ * version of the address will be emalloc'd and returned.
+ * */
+
+PHPAPI php_socket_t php_network_accept_incoming_ex(php_socket_t srvsock,
 		zend_string **textaddr,
 		struct sockaddr **addr,
 		socklen_t *addrlen,
 		struct timeval *timeout,
 		zend_string **error_string,
 		int *error_code,
-		int tcp_nodelay
+		php_sockvals *sockvals
 		)
 {
 	php_socket_t clisock = -1;
@@ -754,11 +866,19 @@ PHPAPI php_socket_t php_network_accept_incoming(php_socket_t srvsock,
 					textaddr,
 					addr, addrlen
 					);
-			if (tcp_nodelay) {
 #ifdef TCP_NODELAY
+			if (PHP_SOCKVAL_IS_SET(sockvals, PHP_SOCKVAL_TCP_NODELAY)) {
+				int tcp_nodelay = 1;
 				setsockopt(clisock, IPPROTO_TCP, TCP_NODELAY, (char*)&tcp_nodelay, sizeof(tcp_nodelay));
-#endif
 			}
+#endif
+#ifdef TCP_KEEPALIVE
+			/* MacOS does not inherit TCP_KEEPALIVE so it needs to be set */
+			if (PHP_SOCKVAL_IS_SET(sockvals, PHP_SOCKVAL_TCP_KEEPIDLE)) {
+				setsockopt(clisock, IPPROTO_TCP, TCP_KEEPALIVE,
+						(char*)&sockvals->keepalive.keepidle, sizeof(sockvals->keepalive.keepidle));
+			}
+#endif
 		} else {
 			error = php_socket_errno();
 		}
@@ -773,19 +893,31 @@ PHPAPI php_socket_t php_network_accept_incoming(php_socket_t srvsock,
 
 	return clisock;
 }
-/* }}} */
 
+PHPAPI php_socket_t php_network_accept_incoming(php_socket_t srvsock,
+		zend_string **textaddr,
+		struct sockaddr **addr,
+		socklen_t *addrlen,
+		struct timeval *timeout,
+		zend_string **error_string,
+		int *error_code,
+		int tcp_nodelay
+		)
+{
+	php_sockvals sockvals = { .mask = tcp_nodelay ? PHP_SOCKVAL_TCP_NODELAY : 0 };
+
+	return php_network_accept_incoming_ex(srvsock, textaddr, addr, addrlen, timeout, error_string,
+			error_code, &sockvals);
+}
 
 /* Connect to a remote host using an interruptible connect with optional timeout.
  * Optionally, the connect can be made asynchronously, which will implicitly
  * enable non-blocking mode on the socket.
  * Returns the connected (or connecting) socket, or -1 on failure.
  * */
-
-/* {{{ php_network_connect_socket_to_host */
-php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short port,
+php_socket_t php_network_connect_socket_to_host_ex(const char *host, unsigned short port,
 		int socktype, int asynchronous, struct timeval *timeout, zend_string **error_string,
-		int *error_code, const char *bindto, unsigned short bindport, long sockopts
+		int *error_code, const char *bindto, unsigned short bindport, long sockopts, php_sockvals *sockvals
 		)
 {
 	int num_addrs, n, fatal = 0;
@@ -793,7 +925,7 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 	struct sockaddr **sal, **psal, *sa;
 	struct timeval working_timeout;
 	socklen_t socklen;
-#if HAVE_GETTIMEOFDAY
+#ifdef HAVE_GETTIMEOFDAY
 	struct timeval limit_time, time_now;
 #endif
 
@@ -806,14 +938,8 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 
 	if (timeout) {
 		memcpy(&working_timeout, timeout, sizeof(working_timeout));
-#if HAVE_GETTIMEOFDAY
-		gettimeofday(&limit_time, NULL);
-		limit_time.tv_sec += working_timeout.tv_sec;
-		limit_time.tv_usec += working_timeout.tv_usec;
-		if (limit_time.tv_usec >= 1000000) {
-			limit_time.tv_usec -= 1000000;
-			limit_time.tv_sec++;
-		}
+#ifdef HAVE_GETTIMEOFDAY
+		php_network_set_limit_time(&limit_time, &working_timeout);
 #endif
 	}
 
@@ -821,7 +947,7 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 		sa = *sal;
 
 		switch (sa->sa_family) {
-#if HAVE_GETADDRINFO && HAVE_IPV6
+#if defined(HAVE_GETADDRINFO) && defined(HAVE_IPV6)
 			case AF_INET6:
 				if (!bindto || strchr(bindto, ':')) {
 					((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
@@ -835,8 +961,8 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 			case AF_INET:
 				((struct sockaddr_in *)sa)->sin_port = htons(port);
 				socklen = sizeof(struct sockaddr_in);
-				if (bindto && strchr(bindto, ':')) {
-					/* IPV4 sock cannot bind to IPV6 address */
+				if (bindto && (strchr(bindto, ':') || !strcmp(bindto, "0"))) {
+					/* IPV4 sock can not bind to IPV6 address */
 					bindto = NULL;
 				}
 				break;
@@ -858,31 +984,32 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 			union {
 				struct sockaddr common;
 				struct sockaddr_in in4;
-#if HAVE_IPV6 && HAVE_INET_PTON
+#ifdef HAVE_IPV6
 				struct sockaddr_in6 in6;
 #endif
-			} local_address;
-			int local_address_len = 0;
+			} local_address = {0};
+			size_t local_address_len = 0;
 
 			if (sa->sa_family == AF_INET) {
-#ifdef HAVE_INET_PTON
 				if (inet_pton(AF_INET, bindto, &local_address.in4.sin_addr) == 1) {
-#else
-				if (inet_aton(bindto, &local_address.in4.sin_addr)) {
-#endif
 					local_address_len = sizeof(struct sockaddr_in);
 					local_address.in4.sin_family = sa->sa_family;
 					local_address.in4.sin_port = htons(bindport);
-					memset(&(local_address.in4.sin_zero), 0, sizeof(local_address.in4.sin_zero));
 				}
 			}
-#if HAVE_IPV6 && HAVE_INET_PTON
+#ifdef HAVE_IPV6
 			else { /* IPV6 */
 				if (inet_pton(AF_INET6, bindto, &local_address.in6.sin6_addr) == 1) {
 					local_address_len = sizeof(struct sockaddr_in6);
 					local_address.in6.sin6_family = sa->sa_family;
 					local_address.in6.sin6_port = htons(bindport);
 				}
+			}
+#endif
+#ifdef IP_BIND_ADDRESS_NO_PORT
+			{
+				int val = 1;
+				(void) setsockopt(sock, SOL_IP, IP_BIND_ADDRESS_NO_PORT, &val, sizeof(val));
 			}
 #endif
 			if (local_address_len == 0) {
@@ -914,6 +1041,20 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 			}
 		}
 #endif
+
+#ifdef SO_KEEPALIVE
+		{
+			int val = 1;
+			if (sockopts & STREAM_SOCKOP_SO_KEEPALIVE) {
+				setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&val, sizeof(val));
+			}
+		}
+#endif
+
+		if (sockvals != NULL) {
+			php_network_apply_sockvals(sock, sockvals);
+		}
+
 		n = php_network_connect_socket(sock, sa, socklen, asynchronous,
 				timeout ? &working_timeout : NULL,
 				error_string, error_code);
@@ -923,7 +1064,7 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
 		}
 
 		/* adjust timeout for next attempt */
-#if HAVE_GETTIMEOFDAY
+#ifdef HAVE_GETTIMEOFDAY
 		if (timeout) {
 			gettimeofday(&time_now, NULL);
 
@@ -960,16 +1101,24 @@ connected:
 
 	return sock;
 }
-/* }}} */
+
+php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short port,
+		int socktype, int asynchronous, struct timeval *timeout, zend_string **error_string,
+		int *error_code, const char *bindto, unsigned short bindport, long sockopts
+		)
+{
+	return php_network_connect_socket_to_host_ex(host, port, socktype, asynchronous, timeout,
+			error_string, error_code, bindto, bindport, sockopts, NULL);
+}
 
 /* {{{ php_any_addr
- * Fills the any (wildcard) address into php_sockaddr_storage
+ * Fills any (wildcard) address into php_sockaddr_storage
  */
 PHPAPI void php_any_addr(int family, php_sockaddr_storage *addr, unsigned short port)
 {
 	memset(addr, 0, sizeof(php_sockaddr_storage));
 	switch (family) {
-#if HAVE_IPV6
+#ifdef HAVE_IPV6
 	case AF_INET6: {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) addr;
 		sin6->sin6_family = AF_INET6;
@@ -992,12 +1141,12 @@ PHPAPI void php_any_addr(int family, php_sockaddr_storage *addr, unsigned short 
 /* {{{ php_sockaddr_size
  * Returns the size of struct sockaddr_xx for the family
  */
-PHPAPI int php_sockaddr_size(php_sockaddr_storage *addr)
+PHPAPI socklen_t php_sockaddr_size(php_sockaddr_storage *addr)
 {
 	switch (((struct sockaddr *)addr)->sa_family) {
 	case AF_INET:
 		return sizeof(struct sockaddr_in);
-#if HAVE_IPV6
+#ifdef HAVE_IPV6
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
 #endif
@@ -1011,6 +1160,28 @@ PHPAPI int php_sockaddr_size(php_sockaddr_storage *addr)
 }
 /* }}} */
 
+#ifdef PHP_WIN32
+char *php_socket_strerror_s(long err, char *buf, size_t bufsize)
+{
+	if (buf == NULL) {
+		char ebuf[1024];
+		errno_t res = strerror_s(ebuf, sizeof(ebuf), err);
+		if (res == 0) {
+			buf = estrdup(ebuf);
+		} else {
+			buf = estrdup("Unknown error");
+		}
+	} else {
+		errno_t res = strerror_s(buf, bufsize, err);
+		if (res != 0) {
+			strncpy(buf, "Unknown error", bufsize);
+			buf[bufsize?(bufsize-1):0] = 0;
+		}
+	}
+	return buf;
+}
+#endif
+
 /* Given a socket error code, if buf == NULL:
  *   emallocs storage for the error message and returns
  * else
@@ -1020,16 +1191,40 @@ PHPAPI int php_sockaddr_size(php_sockaddr_storage *addr)
 PHPAPI char *php_socket_strerror(long err, char *buf, size_t bufsize)
 {
 #ifndef PHP_WIN32
-	char *errstr;
-
-	errstr = strerror(err);
+# ifdef HAVE_STRERROR_R
+	if (buf == NULL) {
+		char ebuf[1024];
+#  ifdef STRERROR_R_CHAR_P
+		char *errstr = strerror_r(err, ebuf, sizeof(ebuf));
+		buf = estrdup(errstr);
+#  else
+		int res = (int) strerror_r(err, ebuf, sizeof(ebuf));
+		if (res == 0) {
+			buf = estrdup(ebuf);
+		} else {
+			buf = estrdup("Unknown error");
+		}
+#  endif
+	} else {
+#  ifdef STRERROR_R_CHAR_P
+		buf = strerror_r(err, buf, bufsize);
+#  else
+		int res = (int) strerror_r(err, buf, bufsize);
+		if (res != 0) {
+			strncpy(buf, "Unknown error", bufsize);
+			buf[bufsize?(bufsize-1):0] = 0;
+		}
+#  endif
+	}
+# else
+	char *errstr = strerror(err);
 	if (buf == NULL) {
 		buf = estrdup(errstr);
 	} else {
 		strncpy(buf, errstr, bufsize);
 		buf[bufsize?(bufsize-1):0] = 0;
 	}
-	return buf;
+# endif
 #else
 	char *sysbuf = php_win32_error_to_msg(err);
 	if (!sysbuf[0]) {
@@ -1044,9 +1239,8 @@ PHPAPI char *php_socket_strerror(long err, char *buf, size_t bufsize)
 	}
 
 	php_win32_error_msg_free(sysbuf);
-
-	return buf;
 #endif
+	return buf;
 }
 /* }}} */
 
@@ -1054,9 +1248,22 @@ PHPAPI char *php_socket_strerror(long err, char *buf, size_t bufsize)
 PHPAPI zend_string *php_socket_error_str(long err)
 {
 #ifndef PHP_WIN32
-	char *errstr;
-
-	errstr = strerror(err);
+# ifdef HAVE_STRERROR_R
+	char ebuf[1024];
+#  ifdef STRERROR_R_CHAR_P
+	char *errstr = strerror_r(err, ebuf, sizeof(ebuf));
+#  else
+	const char *errstr;
+	int res = (int) strerror_r(err, ebuf, sizeof(ebuf));
+	if (res == 0) {
+		errstr = ebuf;
+	} else {
+		errstr = "Unknown error";
+	}
+#  endif
+# else
+	char *errstr = strerror(err);
+# endif
 	return zend_string_init(errstr, strlen(errstr), 0);
 #else
 	zend_string *ret;
@@ -1084,7 +1291,7 @@ PHPAPI php_stream *_php_stream_sock_open_from_socket(php_socket_t socket, const 
 	sock = pemalloc(sizeof(php_netstream_data_t), persistent_id ? 1 : 0);
 	memset(sock, 0, sizeof(php_netstream_data_t));
 
-	sock->is_blocked = 1;
+	sock->is_blocked = true;
 	sock->timeout.tv_sec = FG(default_socket_timeout);
 	sock->timeout.tv_usec = 0;
 	sock->socket = socket;
@@ -1117,9 +1324,9 @@ PHPAPI php_stream *_php_stream_sock_open_host(const char *host, unsigned short p
 	return stream;
 }
 
-PHPAPI int php_set_sock_blocking(php_socket_t socketd, int block)
+PHPAPI zend_result php_set_sock_blocking(php_socket_t socketd, bool block)
 {
-	int ret = SUCCESS;
+	zend_result ret = SUCCESS;
 
 #ifdef PHP_WIN32
 	u_long flags;
@@ -1157,7 +1364,7 @@ PHPAPI void _php_emit_fd_setsize_warning(int max_fd)
 	php_error_docref(NULL, E_WARNING,
 		"PHP needs to be recompiled with a larger value of FD_SETSIZE.\n"
 		"If this binary is from an official www.php.net package, file a bug report\n"
-		"at http://bugs.php.net, including the following information:\n"
+		"at https://github.com/php/php-src/issues, including the following information:\n"
 		"FD_SETSIZE=%d, but you are using %d.\n"
 		" --enable-fd-setsize=%d is recommended, but you may want to set it\n"
 		"to match to maximum number of sockets each script will work with at\n"
@@ -1194,7 +1401,14 @@ PHPAPI int php_poll2(php_pollfd *ufds, unsigned int nfds, int timeout)
 	}
 #endif
 
-	PHP_SAFE_MAX_FD(max_fd, nfds + 1);
+	if (!PHP_SAFE_MAX_FD(max_fd, nfds + 1)) {
+#ifdef PHP_WIN32
+		WSASetLastError(WSAEINVAL);
+#else
+		errno = ERANGE;
+#endif
+		return -1;
+	}
 
 	FD_ZERO(&rset);
 	FD_ZERO(&wset);
@@ -1246,14 +1460,14 @@ PHPAPI int php_poll2(php_pollfd *ufds, unsigned int nfds, int timeout)
 
 #if defined(HAVE_GETHOSTBYNAME_R)
 #ifdef HAVE_FUNC_GETHOSTBYNAME_R_6
-struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
+static struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
 {
 	struct hostent *hp;
 	int herr,res;
 
 	if (*hstbuflen == 0) {
 		*hstbuflen = 1024;
-		*tmphstbuf = (char *)malloc (*hstbuflen);
+		*tmphstbuf = (char *)pemalloc(*hstbuflen, true);
 	}
 
 	while (( res =
@@ -1261,10 +1475,10 @@ struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char *
 		&& (errno == ERANGE)) {
 		/* Enlarge the buffer. */
 		*hstbuflen *= 2;
-		*tmphstbuf = (char *)realloc (*tmphstbuf,*hstbuflen);
+		*tmphstbuf = (char *)perealloc(*tmphstbuf, *hstbuflen, true);
 	}
 
-	if (res != SUCCESS) {
+	if (res != 0) {
 		return NULL;
 	}
 
@@ -1272,14 +1486,14 @@ struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char *
 }
 #endif
 #ifdef HAVE_FUNC_GETHOSTBYNAME_R_5
-struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
+static struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
 {
 	struct hostent *hp;
 	int herr;
 
 	if (*hstbuflen == 0) {
 		*hstbuflen = 1024;
-		*tmphstbuf = (char *)malloc (*hstbuflen);
+		*tmphstbuf = (char *)pemalloc(*hstbuflen, true);
 	}
 
 	while ((NULL == ( hp =
@@ -1287,26 +1501,26 @@ struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char *
 		&& (errno == ERANGE)) {
 		/* Enlarge the buffer. */
 		*hstbuflen *= 2;
-		*tmphstbuf = (char *)realloc (*tmphstbuf,*hstbuflen);
+		*tmphstbuf = (char *)perealloc(*tmphstbuf, *hstbuflen, true);
 	}
 	return hp;
 }
 #endif
 #ifdef HAVE_FUNC_GETHOSTBYNAME_R_3
-struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
+static struct hostent * gethostname_re (const char *host,struct hostent *hostbuf,char **tmphstbuf,size_t *hstbuflen)
 {
 	if (*hstbuflen == 0) {
 		*hstbuflen = sizeof(struct hostent_data);
-		*tmphstbuf = (char *)malloc (*hstbuflen);
+		*tmphstbuf = (char *)pemalloc(*hstbuflen, true);
 	} else {
 		if (*hstbuflen < sizeof(struct hostent_data)) {
 			*hstbuflen = sizeof(struct hostent_data);
-			*tmphstbuf = (char *)realloc(*tmphstbuf, *hstbuflen);
+			*tmphstbuf = (char *)perealloc(*tmphstbuf, *hstbuflen, true);
 		}
 	}
 	memset((void *)(*tmphstbuf),0,*hstbuflen);
 
-	if (SUCCESS != gethostbyname_r(host,hostbuf,(struct hostent_data *)*tmphstbuf)) {
+	if (0 != gethostbyname_r(host,hostbuf,(struct hostent_data *)*tmphstbuf)) {
 		return NULL;
 	}
 

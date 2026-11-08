@@ -8,12 +8,12 @@ ffi.enable=1
 <?php
 function test_size($expected_size, $type) {
     try {
-        $size = FFI::sizeof(FFI::new($type));
+        $size = FFI::sizeof(FFI::cdef()->new($type));
         if ($size !== $expected_size) {
             echo "FAIL: sizeof($type) != $expected_size ($size)\n";
         }
     } catch (Throwable $e) {
-        echo $type . "=>" . get_class($e) . ": " . $e->getMessage()."\n";
+        echo $type, '=>', $e::class, ': ', $e->getMessage(), "\n";
     }
 }
 

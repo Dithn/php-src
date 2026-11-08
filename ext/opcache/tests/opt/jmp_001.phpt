@@ -5,6 +5,7 @@ opcache.enable=1
 opcache.enable_cli=1
 opcache.optimization_level=-1
 opcache.opt_debug_level=0x20000
+zend_test.observer.enabled=0
 --EXTENSIONS--
 opcache
 --FILE--
@@ -27,6 +28,6 @@ test:
      ; (after optimizer)
      ; %s:2-6
 0000 INIT_FCALL_BY_NAME 0 string("test2")
-0001 V1 = DO_FCALL_BY_NAME
-0002 CV0($var) = QM_ASSIGN V1
+0001 T1 = DO_FCALL_BY_NAME
+0002 CV0($var) = QM_ASSIGN T1
 0003 RETURN CV0($var)

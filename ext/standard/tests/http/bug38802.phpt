@@ -3,7 +3,9 @@ Bug #38802 (ignore_errors and max_redirects)
 --INI--
 allow_url_fopen=1
 --SKIPIF--
-<?php require 'server.inc'; http_server_skipif();
+<?php
+require 'server.inc'; http_server_skipif();
+?>
 --FILE--
 <?php
 require 'server.inc';
@@ -107,7 +109,7 @@ Connection: close
 "
 -- Test: fail after 2 redirections --
 
-Warning: fopen(http://%s:%d/foo/bar): Failed to open stream: Redirection limit reached, aborting in %s
+Warning: fopen(): Failed to open stream: Redirection limit reached, aborting in %s
 bool(false)
 string(%d) "GET /foo/bar HTTP/1.1
 Host: %s:%d
@@ -120,7 +122,7 @@ Connection: close
 "
 -- Test: fail at first redirection --
 
-Warning: fopen(http://%s:%d/foo/bar): Failed to open stream: Redirection limit reached, aborting in %s
+Warning: fopen(): Failed to open stream: Redirection limit reached, aborting in %s
 bool(false)
 string(%d) "GET /foo/bar HTTP/1.1
 Host: %s:%d
@@ -129,7 +131,7 @@ Connection: close
 "
 -- Test: fail at first redirection (2) --
 
-Warning: fopen(http://%s:%d/foo/bar): Failed to open stream: Redirection limit reached, aborting in %s
+Warning: fopen(): Failed to open stream: Redirection limit reached, aborting in %s
 bool(false)
 string(%d) "GET /foo/bar HTTP/1.1
 Host: %s:%d

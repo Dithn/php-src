@@ -4,15 +4,11 @@ EXPLAIN - metadata
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
-require_once("connect.inc");
-if (!$IS_MYSQLND)
-  die("skip Open libmysql/MySQL issue http://bugs.mysql.com/?id=62350");
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once('connect.inc');
-    require_once('table.inc');
+    require_once 'table.inc';
 
     if (!$res = mysqli_query($link, 'EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2'))
         printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
@@ -30,7 +26,7 @@ if (!$IS_MYSQLND)
             $field_names[$name] = gettype($value);
     }
 
-    while ($row = mysqli_fetch_assoc($res))
+    while (mysqli_fetch_assoc($res))
         $num_rows++;
 
     if (($tmp = mysqli_num_rows($res)) !== $num_rows) {
@@ -47,12 +43,12 @@ if (!$IS_MYSQLND)
             $num_fields, gettype($tmp), $tmp);
     }
 
-    foreach ($fields as $k => $field) {
+    foreach ($fields as $field) {
         $field->max_length = 0;// change it or we will get diff error
         if (isset($field_names[$field->name])) {
             unset($field_names[$field->name]);
         } else {
-            printf("[006] Unexpected field '%s', dumping info\n");
+            printf("[006] Unexpected field '%s', dumping info\n", $field->name);
             var_dump($field);
         }
     }
@@ -63,9 +59,8 @@ if (!$IS_MYSQLND)
 
     mysqli_free_result($res);
 
-    $stmt = mysqli_stmt_init($link);
-    /* Depending on your version, the MySQL server migit not support this */
-    if ($stmt->prepare('EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2') && $stmt->execute()) {
+    /* Depending on your version, the MySQL server might not support this */
+    if (($stmt = $link->prepare('EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2')) && $stmt->execute()) {
         if (!mysqli_stmt_store_result($stmt))
             printf("[008] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
 
@@ -99,8 +94,7 @@ if (!$IS_MYSQLND)
             var_dump($fields);
         }
 
-        if (function_exists('mysqli_stmt_get_result') &&
-            $stmt->prepare('EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2') &&
+        if ($stmt->prepare('EXPLAIN SELECT t1.*, t2.* FROM test AS t1, test AS t2') &&
             $stmt->execute()) {
             if (!$res_stmt = mysqli_stmt_get_result($stmt)) {
                 printf("[017] Cannot fetch result from PS [%d] %s\n",
@@ -157,7 +151,7 @@ if (!$IS_MYSQLND)
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+require_once 'clean_table.inc';
 ?>
 --EXPECT--
 done!

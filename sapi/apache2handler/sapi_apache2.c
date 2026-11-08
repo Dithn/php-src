@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Sascha Schumann <sascha@schumann.cx>                        |
    |          Parts based on Apache 1.3 SAPI module by                    |
@@ -46,7 +44,6 @@
 #include "http_log.h"
 #include "http_main.h"
 #include "util_script.h"
-#include "http_core.h"
 #include "ap_mpm.h"
 
 #include "php_apache.h"
@@ -182,6 +179,7 @@ php_apache_sapi_read_post(char *buf, size_t count_bytes)
 	php_struct *ctx = SG(server_context);
 	request_rec *r;
 	apr_bucket_brigade *brigade;
+	apr_status_t status;
 
 	r = ctx->r;
 	brigade = ctx->brigade;
@@ -193,7 +191,7 @@ php_apache_sapi_read_post(char *buf, size_t count_bytes)
 	 * need to make sure that if data is available we fill the buffer completely.
 	 */
 
-	while (ap_get_brigade(r->input_filters, brigade, AP_MODE_READBYTES, APR_BLOCK_READ, len) == APR_SUCCESS) {
+	while ((status = ap_get_brigade(r->input_filters, brigade, AP_MODE_READBYTES, APR_BLOCK_READ, len)) == APR_SUCCESS) {
 		apr_brigade_flatten(brigade, buf, &len);
 		apr_brigade_cleanup(brigade);
 		tlen += len;
@@ -202,6 +200,10 @@ php_apache_sapi_read_post(char *buf, size_t count_bytes)
 		}
 		buf += len;
 		len = count_bytes - tlen;
+	}
+
+	if (status != APR_SUCCESS) {
+		return 0;
 	}
 
 	return tlen;
@@ -265,14 +267,14 @@ php_apache_sapi_register_variables(zval *track_vars_array)
 	char *key, *val;
 	size_t new_val_len;
 
-	APR_ARRAY_FOREACH_OPEN(arr, key, val)
+	APR_ARRAY_FOREACH_OPEN(arr, key, val) {
 		if (!val) {
 			val = "";
 		}
 		if (sapi_module.input_filter(PARSE_SERVER, key, &val, strlen(val), &new_val_len)) {
 			php_register_variable_safe(key, val, new_val_len, track_vars_array);
 		}
-	APR_ARRAY_FOREACH_CLOSE()
+	} APR_ARRAY_FOREACH_CLOSE();
 
 	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &ctx->r->uri, strlen(ctx->r->uri), &new_val_len)) {
 		php_register_variable_safe("PHP_SELF", ctx->r->uri, new_val_len, track_vars_array);
@@ -378,15 +380,12 @@ extern zend_module_entry php_apache_module;
 
 static int php_apache2_startup(sapi_module_struct *sapi_module)
 {
-	if (php_module_startup(sapi_module, &php_apache_module, 1)==FAILURE) {
-		return FAILURE;
-	}
-	return SUCCESS;
+	return php_module_startup(sapi_module, &php_apache_module);
 }
 
 static sapi_module_struct apache2_sapi_module = {
 	"apache2handler",
-	"Apache 2.0 Handler",
+	"Apache 2 Handler",
 
 	php_apache2_startup,				/* startup */
 	php_module_shutdown_wrapper,			/* shutdown */
@@ -411,7 +410,6 @@ static sapi_module_struct apache2_sapi_module = {
 	php_apache_sapi_register_variables,
 	php_apache_sapi_log_message,			/* Log message */
 	php_apache_sapi_get_request_time,		/* Request Time */
-	NULL,						/* Child Terminate */
 
 	STANDARD_SAPI_MODULE_PROPERTIES
 };
@@ -464,6 +462,7 @@ php_apache_server_startup(apr_pool_t *pconf, apr_pool_t *plog, apr_pool_t *ptemp
 {
 	void *data = NULL;
 	const char *userdata_key = "apache2hook_post_config";
+	zend_set_dl_use_deepbind(true);
 
 	/* Apache will load, unload and then reload a DSO module. This
 	 * prevents us from starting PHP until the second load. */
@@ -483,7 +482,12 @@ php_apache_server_startup(apr_pool_t *pconf, apr_pool_t *plog, apr_pool_t *ptemp
 		apache2_sapi_module.php_ini_path_override = apache2_php_ini_path_override;
 	}
 #ifdef ZTS
-	php_tsrm_startup();
+	int expected_threads;
+	if (ap_mpm_query(AP_MPMQ_MAX_THREADS, &expected_threads) != APR_SUCCESS) {
+		expected_threads = 1;
+	}
+
+	php_tsrm_startup_ex(expected_threads);
 # ifdef PHP_WIN32
 	ZEND_TSRMLS_CACHE_UPDATE();
 # endif
@@ -709,7 +713,7 @@ zend_first_try {
 		if (!parent_req) {
 			php_execute_script(&zfd);
 		} else {
-			zend_execute_scripts(ZEND_INCLUDE, NULL, 1, &zfd);
+			zend_execute_script(ZEND_INCLUDE, NULL, &zfd);
 		}
 		zend_destroy_file_handle(&zfd);
 
@@ -744,6 +748,7 @@ zend_first_try {
 static void php_apache_child_init(apr_pool_t *pchild, server_rec *s)
 {
 	apr_pool_cleanup_register(pchild, NULL, php_apache_child_shutdown, apr_pool_cleanup_null);
+	php_child_init();
 }
 
 #ifdef ZEND_SIGNALS

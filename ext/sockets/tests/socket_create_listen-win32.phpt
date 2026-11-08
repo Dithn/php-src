@@ -7,6 +7,7 @@ sockets
 if (substr(PHP_OS, 0, 3) != 'WIN') {
     die('skip.. Not valid for non Windows');
 }
+?>
 --FILE--
 <?php
 $sock = socket_create_listen(31338);
@@ -14,7 +15,7 @@ socket_getsockname($sock, $addr, $port);
 var_dump($addr, $port);
 ?>
 --EXPECT--
-string(9) "127.0.0.1"
+string(7) "0.0.0.0"
 int(31338)
 --CREDITS--
 Till Klampaeckel, till@php.net

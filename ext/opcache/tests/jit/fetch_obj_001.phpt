@@ -4,7 +4,6 @@ JIT: FETCH_OBJ
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --EXTENSIONS--
 opcache
 --FILE--
@@ -51,24 +50,24 @@ function bar() {
     $d = array();
     try {
         foo($d->{"ab" ."c"});
-    } catch (Error $err) {
-        echo $err->getMessage(), "\n";
+    } catch (Throwable $err) {
+        echo $err::class, ': ', $err->getMessage(), "\n";
     }
     var_dump($d);
 
     $e = NULL;
     try {
         foo($e->{"ab" ."c"});
-    } catch (Error $err) {
-        echo $err->getMessage(), "\n";
+    } catch (Throwable $err) {
+        echo $err::class, ': ', $err->getMessage(), "\n";
     }
     var_dump($e);
 
     $f = "";
     try {
         foo($f->{"ab" ."c"});
-    } catch (Error $err) {
-        echo $err->getMessage(), "\n";
+    } catch (Throwable $err) {
+        echo $err::class, ': ', $err->getMessage(), "\n";
     }
     var_dump($f);
 }
@@ -97,7 +96,7 @@ object(stdClass)#%d (2) {
 }
 object(stdClass)#%d (2) {
   ["a"]=>
-  &resource(5) of type (stream)
+  &resource(%d) of type (stream)
   ["b"]=>
   array(0) {
   }
@@ -123,15 +122,15 @@ object(stdClass)#%d (2) {
 }
 object(stdClass)#%d (2) {
   ["a"]=>
-  &resource(6) of type (stream)
+  &resource(%d) of type (stream)
   ["b"]=>
   array(0) {
   }
 }
-Attempt to modify property "abc" on array
+Error: Attempt to modify property "abc" on array
 array(0) {
 }
-Attempt to modify property "abc" on null
+Error: Attempt to modify property "abc" on null
 NULL
-Attempt to modify property "abc" on string
+Error: Attempt to modify property "abc" on string
 string(0) ""

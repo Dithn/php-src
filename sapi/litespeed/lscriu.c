@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: George Wang <gwang@litespeedtech.com>                        |
    +----------------------------------------------------------------------+
@@ -51,7 +49,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdlib.h>
 
-#if HAVE_UNISTD_H
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
@@ -60,10 +58,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <sys/stat.h>
 
-#if HAVE_SYS_TYPES_H
-
+#ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
-
 #endif
 
 #include <sys/types.h>
@@ -75,7 +71,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <dlfcn.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
@@ -87,6 +82,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "lscriu.h"
 
 #include <Zend/zend_portability.h>
+#include "main/php_main.h"
 
 #define  LSCRIU_PATH    256
 
@@ -95,11 +91,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static int s_initial_start_reqs = 0;
 static int s_requests_count = 0;
 static int s_restored = 0;
-static int (*s_lscapi_dump_me)() = NULL;
-static int (*s_lscapi_prepare_me)() = NULL;
+static int (*s_lscapi_dump_me)(void) = NULL;
+static int (*s_lscapi_prepare_me)(void) = NULL;
 static int s_native = 0;
 static int s_tried_checkpoint = 0;
+#ifdef LSAPILIB_DEBUG_CRIU
 static int s_criu_debug = 0;
+#endif
 static int s_fd_native = -1;
 static char *s_criu_image_path = NULL;
 static int s_pid = 0;
@@ -118,7 +116,7 @@ typedef void (*sighandler_t)(int);
 
 void lsapi_perror( const char * pMessage, int err_no );
 void LSAPI_reset_server_state( void );
-int LSAPI_Get_ppid();
+int LSAPI_Get_ppid(void);
 
 #ifdef LSAPILIB_DEBUG_CRIU
 #define lscriu_dbg(...) \
@@ -309,6 +307,7 @@ static void LSCRIU_Wink_Server_is_Ready(void)
 }
 
 
+#ifdef LSAPILIB_DEBUG_CRIU
 static char *LSCRIU_Error_File_Name(char *pchFile, int max_len)
 {
     const char *pchDefaultSocketPath = "/tmp/";
@@ -319,7 +318,6 @@ static char *LSCRIU_Error_File_Name(char *pchFile, int max_len)
 }
 
 
-#ifdef LSAPILIB_DEBUG_CRIU
 static void LSCRIU_Debugging(void) {
     char *pchCRIUDebug;
     pchCRIUDebug = getenv("LSAPI_CRIU_DEBUG");
@@ -417,7 +415,9 @@ static int LSCRIU_Native_Dump(pid_t iPid,
     memset(&criu_native_dump, 0, sizeof(criu_native_dump));
     criu_native_dump.m_iPidToDump = iPid;
     strncpy(criu_native_dump.m_chImageDirectory, pchImagePath,
-            sizeof(criu_native_dump.m_chImageDirectory));
+            sizeof(criu_native_dump.m_chImageDirectory) - 1);
+    criu_native_dump.m_chImageDirectory[
+        sizeof(criu_native_dump.m_chImageDirectory) - 1] = '\0';
     pchLastSlash = strrchr(criu_native_dump.m_chSocketDir,'/');
     if (pchLastSlash) {
         pchLastSlash++;
@@ -457,6 +457,7 @@ static void LSCRIU_CloudLinux_Checkpoint(void)
     else {
         s_restored = 1;
         LSAPI_reset_server_state();
+        php_child_init();
         /*
          Here we have restored the php process, so we should to tell (via
          semaphore) mod_lsapi that we are started and ready to receive data.
@@ -496,7 +497,6 @@ static void LSCRIU_Wait_Dump_Finish_Or_Restored(int pid_parent)
 
 static void LSCRIU_try_checkpoint(int *forked_pid)
 {
-    int iRet;
     pid_t iPid;
     pid_t iPidDump = getpid();
 
@@ -523,7 +523,7 @@ static void LSCRIU_try_checkpoint(int *forked_pid)
         pid_t   iPidParent = getppid();
 
         setsid();
-        iRet = LSCRIU_Native_Dump(iPidDump,
+        (void)LSCRIU_Native_Dump(iPidDump,
                                   s_criu_image_path,
                                   s_fd_native);
         close(s_fd_native);
@@ -531,6 +531,7 @@ static void LSCRIU_try_checkpoint(int *forked_pid)
         LSCRIU_Wait_Dump_Finish_Or_Restored(iPidParent);
         LSCRIU_Restored_Error(0, "Restored!");
         LSAPI_reset_server_state();
+        php_child_init();
         s_restored = 1;
     }
     else {
@@ -541,7 +542,7 @@ static void LSCRIU_try_checkpoint(int *forked_pid)
 }
 
 
-static int init_native_env()
+static int init_native_env(void)
 {
     char *pchFd;
     pchFd = getenv("LSAPI_CRIU_SYNC_FD");
@@ -659,7 +660,7 @@ static int LSCRIU_Init_Env_Parameters(void)
 }
 
 
-void LSCRIU_inc_req_processed()
+void LSCRIU_inc_req_processed(void)
 {
     if (!LSCRIU_Get_Global_Counter_Type()) {
         ++s_requests_count;

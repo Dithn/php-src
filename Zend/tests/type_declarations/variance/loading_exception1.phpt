@@ -12,8 +12,8 @@ for ($i = 0; $i < 2; $i++) {
     try {
         class B extends A {
         }
-    } catch (Exception $e) {
-        echo $e->getMessage(), "\n";
+    } catch (Throwable $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
     }
 }
 
@@ -33,16 +33,16 @@ spl_autoload_register(function($class) {
 try {
     class B extends A implements I {
     }
-} catch (Exception $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 ?>
 --EXPECTF--
-Class A does not exist
-Class A does not exist
+Exception: Class A does not exist
+Exception: Class A does not exist
 
 Fatal error: During inheritance of B with variance dependencies: Uncaught Exception: Class A does not exist in %s:%d
 Stack trace:
-#0 %s(%d): {closure}('A')
+#0 %s(%d): {closure:%s:%d}('A')
 #1 {main} in %s on line %d

@@ -4,7 +4,7 @@ mysqli_field_seek()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
@@ -54,16 +54,12 @@ require_once('skipifconnectfailure.inc');
         return $ret;
     }
 
-    require_once("connect.inc");
-
-    require('table.inc');
+    require 'table.inc';
 
     // Make sure that client, connection and result charsets are all the
     // same. Not sure whether this is strictly necessary.
     if (!mysqli_set_charset($link, 'utf8'))
         printf("[%d] %s\n", mysqli_errno($link), mysqli_errno($link));
-
-    $charsetInfo = mysqli_get_charset($link);
 
     if (!$res = mysqli_query($link, "SELECT id, label FROM test ORDER BY id LIMIT 1", MYSQLI_USE_RESULT)) {
         printf("[003] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
@@ -82,13 +78,10 @@ require_once('skipifconnectfailure.inc');
     $field = mysqli_fetch_field($res);
     var_dump($field);
     /* label column, result set charset */
-    if ($field->charsetnr != $charsetInfo->number) {
-        printf("[004] Expecting charset %s/%d got %d\n",
-            $charsetInfo->charset, $charsetInfo->number, $field->charsetnr);
-    }
-    if ($field->length != $charsetInfo->max_length) {
+    $charMaxLength = 3;
+    if ($field->length != $charMaxLength) {
         printf("[005] Expecting length %d got %d\n",
-            $charsetInfo->max_length, $field->max_length);
+            $charMaxLength, $field->max_length);
     }
 
     var_dump(mysqli_field_tell($res));
@@ -120,7 +113,7 @@ require_once('skipifconnectfailure.inc');
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECTF--
 mysqli_field_seek(): Argument #2 ($index) must be greater than or equal to 0

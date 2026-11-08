@@ -6,18 +6,18 @@ ffi
 ffi.enable=1
 --FILE--
 <?php
-var_dump(FFI::isNull(FFI::new("int*")));
-$i = FFI::new("int");
+var_dump(FFI::isNull(FFI::cdef()->new("int*")));
+$i = FFI::cdef()->new("int");
 var_dump(FFI::isNull(FFI::addr($i)));
 try {
     var_dump(FFI::isNull(null));
 } catch (Throwable $e) {
-    echo get_class($e) . ": " . $e->getMessage()."\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
-    var_dump(FFI::isNull(FFI::new("int[0]")));
+    var_dump(FFI::isNull(FFI::cdef()->new("int[0]")));
 } catch (Throwable $e) {
-    echo get_class($e) . ": " . $e->getMessage()."\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--

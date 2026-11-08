@@ -2,15 +2,13 @@
    +----------------------------------------------------------------------+
    | Zend Engine, Bytecode Visualisation                                  |
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Dmitry Stogov <dmitry@php.net>                              |
    +----------------------------------------------------------------------+
@@ -21,6 +19,8 @@
 
 #include "zend_ssa.h"
 #include "zend_dfg.h"
+
+#include <stdint.h>
 
 #define ZEND_DUMP_HIDE_UNREACHABLE     (1<<0)
 #define ZEND_DUMP_RC_INFERENCE         (1<<1)
@@ -37,13 +37,12 @@ ZEND_API void zend_dump_op_line(const zend_op_array *op_array, const zend_basic_
 void zend_dump_dominators(const zend_op_array *op_array, const zend_cfg *cfg);
 void zend_dump_dfg(const zend_op_array *op_array, const zend_cfg *cfg, const zend_dfg *dfg);
 void zend_dump_phi_placement(const zend_op_array *op_array, const zend_ssa *ssa);
-void zend_dump_variables(const zend_op_array *op_array);
 void zend_dump_ssa_variables(const zend_op_array *op_array, const zend_ssa *ssa, uint32_t dump_flags);
-ZEND_API void zend_dump_ssa_var(const zend_op_array *op_array, const zend_ssa *ssa, int ssa_var_num, zend_uchar var_type, int var_num, uint32_t dump_flags);
-ZEND_API void zend_dump_var(const zend_op_array *op_array, zend_uchar var_type, int var_num);
+ZEND_API void zend_dump_ssa_var(const zend_op_array *op_array, const zend_ssa *ssa, int ssa_var_num, uint8_t var_type, uint32_t var_num, uint32_t dump_flags);
+ZEND_API void zend_dump_var(const zend_op_array *op_array, uint8_t var_type, uint32_t var_num);
 void zend_dump_op_array_name(const zend_op_array *op_array);
 void zend_dump_const(const zval *zv);
-void zend_dump_ht(HashTable *ht);
+void zend_dump_ht(const HashTable *ht);
 
 END_EXTERN_C()
 

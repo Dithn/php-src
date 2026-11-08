@@ -6,6 +6,7 @@ opcache.enable_cli=1
 opcache.optimization_level=-1
 opcache.opt_debug_level=0x20000
 opcache.preload=
+zend_test.observer.enabled=0
 --EXTENSIONS--
 opcache
 --FILE--
@@ -30,9 +31,9 @@ foo:
      ; (after optimizer)
      ; %sdce_006.php:5-8
 0000 CV0($x) = RECV 1
-0001 V2 = NEW 0 string("A")
+0001 T2 = NEW 0 string("A")
 0002 DO_FCALL
-0003 CV1($a) = QM_ASSIGN V2
+0003 CV1($a) = QM_ASSIGN T2
 0004 ASSIGN_OBJ CV1($a) string("foo")
 0005 OP_DATA CV0($x)
 0006 RETURN null

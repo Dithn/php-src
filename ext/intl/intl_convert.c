@@ -1,12 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Vadim Savchuk <vsavchuk@productengine.com>                  |
    |          Dmitry Lakhtyuk <dlakhtyuk@productengine.com>               |
@@ -14,13 +14,15 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include <php.h>
 
 #include "intl_common.h"
 #include "intl_convert.h"
+
+#include <unicode/utf16.h>
 
 /* {{{ intl_convert_utf8_to_utf16
  * Convert given string from UTF-8 to UTF-16 to *target buffer.
@@ -59,7 +61,7 @@ void intl_convert_utf8_to_utf16(
 	 */
 	*status = U_ZERO_ERROR;
 
-	if(src_len > INT32_MAX) {
+	if (UNEXPECTED(src_len > INT32_MAX)) {
 		/* we cannot fit this string */
 		*status = U_BUFFER_OVERFLOW_ERROR;
 		return;
@@ -103,6 +105,54 @@ void intl_convert_utf8_to_utf16(
 	*target_len = dst_len;
 }
 /* }}} */
+
+/* Convert given string from UTF-8 to UTF-16 to a zend_string*
+ *
+ * @param src         String to convert.
+ * @param src_len     Length of the source string.
+ * @param status      Conversion status.
+ *
+ * @return zend_string* on success and NULL on failure
+ */
+zend_string *intl_convert_utf8_to_utf16_zstr(
+	const char* src,    size_t  src_len,
+	UErrorCode* status )
+{
+	int32_t     dst_len = 0;
+
+	*status = U_ZERO_ERROR;
+
+	if (UNEXPECTED(src_len > INT32_MAX)) {
+		/* we cannot fit this string */
+		*status = U_BUFFER_OVERFLOW_ERROR;
+		return NULL;
+	}
+
+	/* Pre-flight */
+	u_strFromUTF8( NULL, 0, &dst_len, src, (int32_t)src_len, status );
+	if( *status != U_BUFFER_OVERFLOW_ERROR && *status != U_STRING_NOT_TERMINATED_WARNING )
+		return NULL;
+
+	/* Note: l=sizeof(UChar)-1 because we need sizeof(UChar) bytes for the NUL terminator instead of 1. */
+	zend_string *dst = zend_string_safe_alloc(sizeof(UChar), dst_len, sizeof(UChar) - 1, false);
+	UChar *dst_buf = (UChar *) ZSTR_VAL(dst);
+	ZEND_ASSERT((ZSTR_LEN(dst) - 1) / 2 == dst_len);
+	/* However, the length must not include the NUL terminator that we included previously. */
+	ZSTR_LEN(dst)--;
+
+	/* Convert source string from UTF-8 to UTF-16. */
+	*status = U_ZERO_ERROR;
+	u_strFromUTF8( dst_buf, dst_len + 1, NULL, src, src_len, status );
+	if( U_FAILURE( *status ) )
+	{
+		zend_string_efree( dst );
+		return NULL;
+	}
+
+	dst_buf[dst_len] = 0;
+
+	return dst;
+}
 
 /* {{{ intl_convert_utf16_to_utf8
  * Convert given string from UTF-16 to UTF-8.
@@ -150,3 +200,43 @@ zend_string* intl_convert_utf16_to_utf8(
 	return dst;
 }
 /* }}} */
+
+bool intl_convert_utf8_offset_to_utf16(const char *str, size_t str_len, int32_t *position, UErrorCode *status)
+{
+	int32_t utf16_position;
+
+	if (*position < 0 || (size_t) *position > str_len) {
+		return true;
+	}
+
+	*status = U_ZERO_ERROR;
+	u_strFromUTF8(NULL, 0, &utf16_position, str, *position, status);
+	if (*status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(*status)) {
+		return false;
+	}
+	*status = U_ZERO_ERROR;
+
+	*position = utf16_position;
+	return true;
+}
+
+int32_t intl_convert_utf16_offset_to_utf8(const UChar *str, int32_t str_len, int32_t position)
+{
+	int32_t utf8_position;
+	UErrorCode status = U_ZERO_ERROR;
+
+	if (position < 0 || position > str_len) {
+		return position;
+	}
+
+	if (position > 0 && position < str_len && U16_IS_LEAD(str[position - 1]) && U16_IS_TRAIL(str[position])) {
+		position--;
+	}
+
+	u_strToUTF8(NULL, 0, &utf8_position, str, position, &status);
+	if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
+		return position;
+	}
+
+	return utf8_position;
+}

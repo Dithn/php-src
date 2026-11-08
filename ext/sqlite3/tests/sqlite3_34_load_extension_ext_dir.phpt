@@ -19,9 +19,9 @@ $db = new SQLite3(':memory:');
 try {
   $db->loadExtension("");
 } catch (Extension $ex) {
-  var_dump($ex->getMessage());
+  echo $ex::class, ': ', $ex->getMessage(), "\n";
 }
 
 ?>
 --EXPECTF--
-Warning: SQLite3::loadExtension(): SQLite Extension are disabled in %s on line %d
+Warning: SQLite3::loadExtension(): SQLite Extensions are disabled in %s on line %d

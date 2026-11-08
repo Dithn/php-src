@@ -1,26 +1,24 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Sascha Schumann <sascha@schumann.cx>                         |
    +----------------------------------------------------------------------+
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_DB2
+#ifdef DBA_DB2
 #include "php_db2.h"
 #include <sys/stat.h>
 
@@ -41,7 +39,7 @@ DBA_OPEN_FUNC(db2)
 	int gmode = 0;
 	int filemode = info->file_permission;
 	struct stat check_stat;
-	int s = VCWD_STAT(info->path, &check_stat);
+	int s = VCWD_STAT(ZSTR_VAL(info->path), &check_stat);
 
 	if (!s && !check_stat.st_size) {
 		info->mode = DBA_TRUNC; /* force truncate */
@@ -61,7 +59,7 @@ DBA_OPEN_FUNC(db2)
 		return FAILURE;/* not possible */
 	}
 
-	if (db_open(info->path, type, gmode, filemode, NULL, NULL, &dbp)) {
+	if (db_open(ZSTR_VAL(info->path), type, gmode, filemode, NULL, NULL, &dbp)) {
 		return FAILURE;
 	}
 
@@ -189,7 +187,7 @@ DBA_SYNC_FUNC(db2)
 
 DBA_INFO_FUNC(db2)
 {
-	return estrdup(DB_VERSION_STRING);
+	return DB_VERSION_STRING;
 }
 
 #endif

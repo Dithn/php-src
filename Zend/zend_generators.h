@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Nikita Popov <nikic@php.net>                                |
    |          Bob Weinand <bobwei9@hotmail.com>                           |
@@ -19,6 +18,10 @@
 
 #ifndef ZEND_GENERATORS_H
 #define ZEND_GENERATORS_H
+
+#include <stdint.h>
+
+#include "zend_compile.h"
 
 BEGIN_EXTERN_C()
 
@@ -84,14 +87,19 @@ struct _zend_generator {
 	/* Fake execute_data for stacktraces */
 	zend_execute_data execute_fake;
 
+	/* The underlying function, equivalent to execute_data->func while
+	 * the generator is alive. */
+	zend_function *func;
+
 	/* ZEND_GENERATOR_* flags */
-	zend_uchar flags;
+	uint8_t flags;
 };
 
-static const zend_uchar ZEND_GENERATOR_CURRENTLY_RUNNING = 0x1;
-static const zend_uchar ZEND_GENERATOR_FORCED_CLOSE      = 0x2;
-static const zend_uchar ZEND_GENERATOR_AT_FIRST_YIELD    = 0x4;
-static const zend_uchar ZEND_GENERATOR_DO_INIT           = 0x8;
+static const uint8_t ZEND_GENERATOR_CURRENTLY_RUNNING = 0x1;
+static const uint8_t ZEND_GENERATOR_FORCED_CLOSE      = 0x2;
+static const uint8_t ZEND_GENERATOR_AT_FIRST_YIELD    = 0x4;
+static const uint8_t ZEND_GENERATOR_DO_INIT           = 0x8;
+static const uint8_t ZEND_GENERATOR_IN_FIBER          = 0x10;
 
 void zend_register_generator_ce(void);
 ZEND_API void zend_generator_close(zend_generator *generator, bool finished_execution);
@@ -124,6 +132,8 @@ static zend_always_inline zend_generator *zend_generator_get_current(zend_genera
 
 	return zend_generator_update_current(generator);
 }
+
+HashTable *zend_generator_frame_gc(zend_get_gc_buffer *gc_buffer, zend_generator *generator);
 
 END_EXTERN_C()
 

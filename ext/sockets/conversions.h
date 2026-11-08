@@ -1,3 +1,17 @@
+/*
+   +----------------------------------------------------------------------+
+   | Copyright © The PHP Group and Contributors.                          |
+   +----------------------------------------------------------------------+
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
+   +----------------------------------------------------------------------+
+   | Authors: Gustavo Lopes    <cataphract@php.net>                       |
+   +----------------------------------------------------------------------+
+ */
+
 #ifndef PHP_SOCK_CONVERSIONS_H
 #define PHP_SOCK_CONVERSIONS_H 1
 
@@ -6,6 +20,16 @@
 #ifndef PHP_WIN32
 # include <netinet/in.h>
 # include <sys/socket.h>
+# if defined(__FreeBSD__) || defined(__NetBSD__)
+#  include <sys/un.h>
+#  if defined(__FreeBSD__)
+     // we can't fully implement the ancillary data feature with
+     // the legacy sockcred/LOCAL_CREDS pair (due to lack of process
+     // id handling), so we disable it since only the
+     // sockcred2/LOCAL_CREDS_PERSISTENT pair can address it.
+#    undef LOCAL_CREDS
+#  endif
+# endif
 #else
 # include <Ws2tcpip.h>
 #endif
@@ -51,7 +75,7 @@ void from_zval_write_in6_pktinfo(const zval *container, char *in6_pktinfo_c, ser
 void to_zval_read_in6_pktinfo(const char *data, zval *zv, res_context *ctx);
 #endif
 
-#ifdef SO_PASSCRED
+#if defined(SO_PASSCRED) || defined(LOCAL_CREDS_PERSISTENT) || defined(LOCAL_CREDS)
 void from_zval_write_ucred(const zval *container, char *ucred_c, ser_context *ctx);
 void to_zval_read_ucred(const char *data, zval *zv, res_context *ctx);
 #endif

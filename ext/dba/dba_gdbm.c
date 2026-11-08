@@ -1,26 +1,24 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Sascha Schumann <sascha@schumann.cx>                         |
    +----------------------------------------------------------------------+
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 
-#if DBA_GDBM
+#ifdef DBA_GDBM
 #include "php_gdbm.h"
 
 #ifdef GDBM_INCLUDE_FILE
@@ -46,7 +44,7 @@ DBA_OPEN_FUNC(gdbm)
 	if(gmode == -1)
 		return FAILURE; /* not possible */
 
-	dbf = gdbm_open(info->path, 0, gmode, filemode, NULL);
+	dbf = gdbm_open(ZSTR_VAL(info->path), /* int block_size */ 0, gmode, filemode, NULL);
 
 	if(dbf) {
 		info->dbf = pemalloc(sizeof(dba_gdbm_data), info->flags&DBA_PERSISTENT);
@@ -191,7 +189,7 @@ DBA_SYNC_FUNC(gdbm)
 
 DBA_INFO_FUNC(gdbm)
 {
-	return estrdup(gdbm_version);
+	return gdbm_version;
 }
 
 #endif

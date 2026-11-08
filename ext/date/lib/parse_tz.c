@@ -211,6 +211,7 @@ static int read_64bit_transitions(const unsigned char **tzf, timelib_tzinfo *tz)
 			buffer[i] = timelib_conv_int64_signed(buffer[i]);
 			/* Sanity check to see whether TS is just increasing */
 			if (i > 0 && !(buffer[i] > buffer[i - 1])) {
+				timelib_free(buffer);
 				return TIMELIB_ERROR_CORRUPT_TRANSITIONS_DONT_INCREASE;
 			}
 		}
@@ -543,7 +544,7 @@ void timelib_dump_tzinfo(timelib_tzinfo *tz)
 		timelib_free(trans_str);
 	}
 	for (i = 0; i < tz->bit64.leapcnt; i++) {
-		date_str = format_ut_time(tz->trans[i], tz);
+		date_str = format_ut_time(tz->leap_times[i].trans, tz);
 		printf (
 			"%s (%20ld) = %d\n",
 			date_str,
@@ -910,21 +911,42 @@ timelib_time_offset *timelib_get_time_zone_info(timelib_sll ts, timelib_tzinfo *
 	return tmp;
 }
 
+int timelib_get_time_zone_offset_info(timelib_sll ts, timelib_tzinfo *tz, int32_t* offset, timelib_sll* transition_time, unsigned int* is_dst)
+{
+	ttinfo *to;
+	timelib_sll tmp_transition_time;
+
+	if (tz == NULL) {
+		return 0;
+	}
+
+	if ((to = timelib_fetch_timezone_offset(tz, ts, &tmp_transition_time))) {
+		if (offset) {
+			*offset = to->offset;
+		}
+		if (is_dst) {
+			*is_dst = to->isdst;
+		}
+		if (transition_time) {
+			*transition_time = tmp_transition_time;
+		}
+		return 1;
+	}
+	return 0;
+}
+
 timelib_sll timelib_get_current_offset(timelib_time *t)
 {
-	timelib_time_offset *gmt_offset;
-	timelib_sll retval;
-
 	switch (t->zone_type) {
 		case TIMELIB_ZONETYPE_ABBR:
 		case TIMELIB_ZONETYPE_OFFSET:
 			return t->z + (t->dst * 3600);
 
-		case TIMELIB_ZONETYPE_ID:
-			gmt_offset = timelib_get_time_zone_info(t->sse, t->tz_info);
-			retval = gmt_offset->offset;
-			timelib_time_offset_dtor(gmt_offset);
-			return retval;
+		case TIMELIB_ZONETYPE_ID: {
+			int32_t      offset = 0;
+			timelib_get_time_zone_offset_info(t->sse, t->tz_info, &offset, NULL, NULL);
+			return offset;
+		}
 
 		default:
 			return 0;

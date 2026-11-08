@@ -4,6 +4,9 @@
     case 'post':
       var_dump($_POST);
       break;
+    case 'input':
+      var_dump(file_get_contents('php://input'));
+      break;
     case 'getpost':
       var_dump($_GET);
       var_dump($_POST);
@@ -42,6 +45,20 @@
       break;
     case 'method':
       echo $_SERVER['REQUEST_METHOD'];
+      break;
+    case 'redirect':
+      // A 307 preserves the method and body, so libcurl must rewind the upload
+      // (via CURLOPT_SEEKFUNCTION) before resending it to the new location.
+      $target = $_GET['target'] ?? 'input';
+      $code = $_GET['code'] ?? 307;
+      header('Location: /get.inc?test=' . $target, true, $code);
+    case 'bigbody':
+      $mib = isset($_GET['mib']) ? (int) $_GET['mib'] : 12;
+      header('Content-Type: application/octet-stream');
+      $chunk = str_repeat('x', 1024 * 1024);
+      for ($i = 0; $i < $mib; $i++) {
+        echo $chunk;
+      }
       break;
     default:
       echo "Hello World!\n";

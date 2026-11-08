@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Stig Venaas <venaas@uninett.no>                              |
    +----------------------------------------------------------------------+
@@ -19,9 +17,7 @@
 
 #include <php.h>
 
-#ifdef PHP_WIN32
-# include "win32/inet.h"
-#else
+#ifndef PHP_WIN32
 # undef closesocket
 # define closesocket close
 # include <netinet/tcp.h>
@@ -49,7 +45,7 @@
 # define EWOULDBLOCK EAGAIN
 #endif
 
-/* This is a work around for GCC bug 69602: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69602 */
+/* This is a workaround for GCC bug 69602: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69602 */
 #if EAGAIN != EWOULDBLOCK
 # define PHP_IS_TRANSIENT_ERROR(err) (err == EAGAIN || err == EWOULDBLOCK)
 #else
@@ -66,6 +62,11 @@
  * unless buf is not NULL.
  * Also works sensibly for win32 */
 BEGIN_EXTERN_C()
+#ifdef PHP_WIN32
+char *php_socket_strerror_s(long err, char *buf, size_t bufsize);
+#else
+#define php_socket_strerror_s php_socket_strerror
+#endif
 PHPAPI char *php_socket_strerror(long err, char *buf, size_t bufsize);
 PHPAPI zend_string *php_socket_error_str(long err);
 END_EXTERN_C()
@@ -98,8 +99,10 @@ END_EXTERN_C()
 
 #ifdef PHP_WIN32
 typedef SOCKET php_socket_t;
+#define PHP_SOCKET_FMT "%" PRIxPTR
 #else
 typedef int php_socket_t;
+#define PHP_SOCKET_FMT "%d"
 #endif
 
 #ifdef PHP_WIN32
@@ -118,7 +121,8 @@ typedef int php_socket_t;
 #define STREAM_SOCKOP_IPV6_V6ONLY         (1 << 3)
 #define STREAM_SOCKOP_IPV6_V6ONLY_ENABLED (1 << 4)
 #define STREAM_SOCKOP_TCP_NODELAY         (1 << 5)
-
+#define STREAM_SOCKOP_SO_REUSEADDR        (1 << 6)
+#define STREAM_SOCKOP_SO_KEEPALIVE        (1 << 7)
 
 /* uncomment this to debug poll(2) emulation on systems that have poll(2) */
 /* #define PHP_USE_POLL_2_EMULATION 1 */
@@ -162,7 +166,7 @@ PHPAPI int php_poll2(php_pollfd *ufds, unsigned int nfds, int timeout);
 /* timeval-to-timeout (for poll(2)) */
 static inline int php_tvtoto(struct timeval *timeouttv)
 {
-	if (timeouttv) {
+	if (timeouttv && timeouttv->tv_sec >= 0 && timeouttv->tv_sec <= ((INT_MAX - 1000) / 1000)) {
 		return (timeouttv->tv_sec * 1000) + (timeouttv->tv_usec / 1000);
 	}
 	return -1;
@@ -211,28 +215,207 @@ static inline int php_pollfd_for_ms(php_socket_t fd, int events, int timeout)
 /* emit warning and suggestion for unsafe select(2) usage */
 PHPAPI void _php_emit_fd_setsize_warning(int max_fd);
 
+static inline bool _php_check_fd_setsize(php_socket_t *max_fd, int setsize)
+{
+#ifdef PHP_WIN32
+	(void)(max_fd); // Unused
+	if (setsize + 1 >= FD_SETSIZE) {
+		_php_emit_fd_setsize_warning(setsize);
+		return false;
+	}
+#else
+	(void)(setsize); // Unused
+	if (*max_fd >= FD_SETSIZE) {
+		_php_emit_fd_setsize_warning(*max_fd);
+		*max_fd = FD_SETSIZE - 1;
+		return false;
+	}
+#endif
+	return true;
+}
+
 #ifdef PHP_WIN32
 /* it is safe to FD_SET too many fd's under win32; the macro will simply ignore
  * descriptors that go beyond the default FD_SETSIZE */
 # define PHP_SAFE_FD_SET(fd, set)	FD_SET(fd, set)
 # define PHP_SAFE_FD_CLR(fd, set)	FD_CLR(fd, set)
 # define PHP_SAFE_FD_ISSET(fd, set)	FD_ISSET(fd, set)
-# define PHP_SAFE_MAX_FD(m, n)		do { if (n + 1 >= FD_SETSIZE) { _php_emit_fd_setsize_warning(n); }} while(0)
+# define PHP_SAFE_MAX_FD(m, n)		_php_check_fd_setsize(&m, n)
 #else
 # define PHP_SAFE_FD_SET(fd, set)	do { if (fd < FD_SETSIZE) FD_SET(fd, set); } while(0)
 # define PHP_SAFE_FD_CLR(fd, set)	do { if (fd < FD_SETSIZE) FD_CLR(fd, set); } while(0)
 # define PHP_SAFE_FD_ISSET(fd, set)	((fd < FD_SETSIZE) && FD_ISSET(fd, set))
-# define PHP_SAFE_MAX_FD(m, n)		do { if (m >= FD_SETSIZE) { _php_emit_fd_setsize_warning(m); m = FD_SETSIZE - 1; }} while(0)
+# define PHP_SAFE_MAX_FD(m, n)		_php_check_fd_setsize(&m, n)
+#endif
+
+/* A growable fd_set for stream_select(), without the FD_SETSIZE limit.
+ *
+ * On POSIX, fd_set is a bitset indexed by descriptor, and select() takes any nfds: the set
+ * is a bitset that grows to hold the highest descriptor added.
+ * On Windows, fd_set is an array of SOCKETs ({ u_int fd_count; SOCKET fd_array[]; }), and
+ * select() reads fd_count of them: the set is that array, grown to hold every socket added.
+ * Either way, `set` can be passed to select() as it is. */
+#ifdef PHP_WIN32
+typedef struct {
+	u_int capacity; /* SOCKET slots in set->fd_array */
+	fd_set *set;
+} php_growable_fd_set;
+
+# define PHP_GROWABLE_FD_SET_ALLOC_SIZE(cap) \
+	(offsetof(fd_set, fd_array) + (size_t)(cap) * sizeof(SOCKET))
+
+static zend_always_inline void php_growable_fd_set_init(php_growable_fd_set *s, u_int capacity)
+{
+	s->capacity = MAX(capacity, FD_SETSIZE);
+	s->set = (fd_set *) pemalloc(PHP_GROWABLE_FD_SET_ALLOC_SIZE(s->capacity), 1);
+	s->set->fd_count = 0;
+}
+
+/* Makes room for capacity sockets */
+static zend_always_inline void php_growable_fd_set_reserve(php_growable_fd_set *s, u_int capacity)
+{
+	if (capacity > s->capacity) {
+		do {
+			s->capacity *= 2;
+		} while (capacity > s->capacity);
+		s->set = (fd_set *) perealloc(s->set, PHP_GROWABLE_FD_SET_ALLOC_SIZE(s->capacity), 1);
+	}
+}
+
+static zend_always_inline void php_growable_fd_set_add(php_growable_fd_set *s, php_socket_t fd)
+{
+	/* Appends without the duplicate scan of winsock's FD_SET(); the set is
+	 * de-duplicated in one pass later by php_growable_fd_set_sort_unique(). */
+	php_growable_fd_set_reserve(s, s->set->fd_count + 1);
+	s->set->fd_array[s->set->fd_count++] = fd;
+}
+
+static zend_always_inline int php_growable_fd_set_cmp(const void *a, const void *b)
+{
+	SOCKET x = *(const SOCKET *) a;
+	SOCKET y = *(const SOCKET *) b;
+	return (x > y) - (x < y);
+}
+
+/* Sorts the sockets ascending and drops duplicates. This makes select() count a
+ * socket listed more than once (e.g. stream_select([$a, $a], ...)) a single time
+ * - as the POSIX bitset does - and lets php_growable_fd_set_isset() binary-search
+ * instead of scanning, so a whole stream_select() call is O(n log n), not O(n^2). */
+static zend_always_inline void php_growable_fd_set_sort_unique(php_growable_fd_set *s)
+{
+	u_int n = s->set->fd_count;
+	if (n < 2) {
+		return;
+	}
+	qsort(s->set->fd_array, n, sizeof(SOCKET), php_growable_fd_set_cmp);
+	u_int w = 1;
+	for (u_int r = 1; r < n; r++) {
+		if (s->set->fd_array[r] != s->set->fd_array[w - 1]) {
+			s->set->fd_array[w++] = s->set->fd_array[r];
+		}
+	}
+	s->set->fd_count = w;
+}
+
+/* Binary search; the set must have been sorted by php_growable_fd_set_sort_unique(). */
+static zend_always_inline bool php_growable_fd_set_isset(const php_growable_fd_set *s, php_socket_t fd)
+{
+	SOCKET target = (SOCKET) fd;
+	u_int lo = 0, hi = s->set->fd_count;
+	while (lo < hi) {
+		u_int mid = lo + (hi - lo) / 2;
+		SOCKET v = s->set->fd_array[mid];
+		if (v < target) {
+			lo = mid + 1;
+		} else if (v > target) {
+			hi = mid;
+		} else {
+			return true;
+		}
+	}
+	return false;
+}
+
+static zend_always_inline void php_growable_fd_set_zero(php_growable_fd_set *s)
+{
+	s->set->fd_count = 0;
+}
+
+static zend_always_inline void php_growable_fd_set_copy(php_growable_fd_set *dst, const php_growable_fd_set *src)
+{
+	php_growable_fd_set_reserve(dst, src->set->fd_count);
+	memcpy(dst->set, src->set, PHP_GROWABLE_FD_SET_ALLOC_SIZE(src->set->fd_count));
+}
+
+static zend_always_inline void php_growable_fd_set_destroy(php_growable_fd_set *s)
+{
+	if (s->set) {
+		pefree(s->set, 1);
+		s->set = NULL;
+	}
+	s->capacity = 0;
+}
+#else
+typedef struct {
+	size_t size; /* bytes in set */
+	fd_set *set;
+} php_growable_fd_set;
+
+/* Use the platform's fd_mask: on big-endian systems the bit positions depend on the word size */
+# ifdef NFDBITS
+typedef fd_mask php_growable_fd_mask;
+#  define PHP_GROWABLE_FD_SET_WORD_BITS NFDBITS
+# else
+typedef unsigned long php_growable_fd_mask;
+#  define PHP_GROWABLE_FD_SET_WORD_BITS (CHAR_BIT * sizeof(unsigned long))
+# endif
+/* select() operates on whole words so the size must be a multiple of sizeof(php_growable_fd_mask) */
+# define PHP_GROWABLE_FD_SET_SIZE(nfds) (ZEND_MM_ALIGNED_SIZE_EX((size_t)(nfds), PHP_GROWABLE_FD_SET_WORD_BITS) / CHAR_BIT)
+
+static zend_always_inline void php_growable_fd_set_init(php_growable_fd_set *s, unsigned int capacity)
+{
+	s->size = PHP_GROWABLE_FD_SET_SIZE(capacity);
+	s->set = (fd_set *) ecalloc(1, s->size);
+}
+
+/* Makes room for the descriptors below capacity */
+static zend_always_inline void php_growable_fd_set_reserve(php_growable_fd_set *s, unsigned int capacity)
+{
+	size_t size = PHP_GROWABLE_FD_SET_SIZE(capacity);
+	if (size > s->size) {
+		size_t old_size = s->size;
+		s->size = MAX(size, old_size * 2);
+		s->set = (fd_set *) erealloc(s->set, s->size);
+		memset((char *) s->set + old_size, 0, s->size - old_size);
+	}
+}
+
+static zend_always_inline void php_growable_fd_set_add(php_growable_fd_set *s, php_socket_t fd)
+{
+	php_growable_fd_set_reserve(s, fd + 1);
+	((php_growable_fd_mask *) s->set)[fd / PHP_GROWABLE_FD_SET_WORD_BITS] |= (php_growable_fd_mask) (1UL << (fd % PHP_GROWABLE_FD_SET_WORD_BITS));
+}
+
+static zend_always_inline bool php_growable_fd_set_isset(const php_growable_fd_set *s, php_socket_t fd)
+{
+	return (size_t) fd < s->size * CHAR_BIT
+		&& (((const php_growable_fd_mask *) s->set)[fd / PHP_GROWABLE_FD_SET_WORD_BITS] >> (fd % PHP_GROWABLE_FD_SET_WORD_BITS)) & 1;
+}
+
+static zend_always_inline void php_growable_fd_set_destroy(php_growable_fd_set *s)
+{
+	efree(s->set);
+}
 #endif
 
 
 #define PHP_SOCK_CHUNK_SIZE	8192
 
-#ifdef HAVE_SOCKADDR_STORAGE
+#ifdef HAVE_STRUCT_SOCKADDR_STORAGE
 typedef struct sockaddr_storage php_sockaddr_storage;
 #else
 typedef struct {
-#ifdef HAVE_SOCKADDR_SA_LEN
+#ifdef HAVE_STRUCT_SOCKADDR_SA_LEN
 		unsigned char ss_len;
 		unsigned char ss_family;
 #else
@@ -242,9 +425,39 @@ typedef struct {
 } php_sockaddr_storage;
 #endif
 
+#define PHP_SOCKVAL_TCP_NODELAY   (1 << 0)
+#define PHP_SOCKVAL_TCP_KEEPIDLE  (1 << 1)
+#define PHP_SOCKVAL_TCP_KEEPCNT   (1 << 2)
+#define PHP_SOCKVAL_TCP_KEEPINTVL (1 << 3)
+#define PHP_SOCKVAL_SO_LINGER     (1 << 4)
+#define PHP_SOCKVAL_SO_RCVBUF     (1 << 5)
+#define PHP_SOCKVAL_SO_SNDBUF     (1 << 6)
+
+#define PHP_SOCKVAL_IS_SET(sockvals, opt) ((sockvals)->mask & (opt))
+
+typedef struct {
+	unsigned int mask;
+	int tcp_nodelay;
+	int linger;
+	int rcvbuf;
+	int sndbuf;
+	struct {
+		int keepidle;
+		int keepcnt;
+		int keepintvl;
+	} keepalive;
+} php_sockvals;
+
 BEGIN_EXTERN_C()
 PHPAPI int php_network_getaddresses(const char *host, int socktype, struct sockaddr ***sal, zend_string **error_string);
 PHPAPI void php_network_freeaddresses(struct sockaddr **sal);
+
+PHPAPI void php_network_apply_sockvals(php_socket_t sock, const php_sockvals *sockvals);
+
+PHPAPI php_socket_t php_network_connect_socket_to_host_ex(const char *host, unsigned short port,
+		int socktype, int asynchronous, struct timeval *timeout, zend_string **error_string,
+		int *error_code, const char *bindto, unsigned short bindport, long sockopts, php_sockvals *sockvals
+		);
 
 PHPAPI php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short port,
 		int socktype, int asynchronous, struct timeval *timeout, zend_string **error_string,
@@ -262,8 +475,22 @@ PHPAPI int php_network_connect_socket(php_socket_t sockfd,
 #define php_connect_nonb(sock, addr, addrlen, timeout) \
 	php_network_connect_socket((sock), (addr), (addrlen), 0, (timeout), NULL, NULL)
 
+PHPAPI php_socket_t php_network_bind_socket_to_local_addr_ex(const char *host, unsigned port,
+		int socktype, long sockopts, php_sockvals *sockvals, zend_string **error_string, int *error_code
+		);
+
 PHPAPI php_socket_t php_network_bind_socket_to_local_addr(const char *host, unsigned port,
 		int socktype, long sockopts, zend_string **error_string, int *error_code
+		);
+
+PHPAPI php_socket_t php_network_accept_incoming_ex(php_socket_t srvsock,
+		zend_string **textaddr,
+		struct sockaddr **addr,
+		socklen_t *addrlen,
+		struct timeval *timeout,
+		zend_string **error_string,
+		int *error_code,
+		php_sockvals *sockvals
 		);
 
 PHPAPI php_socket_t php_network_accept_incoming(php_socket_t srvsock,
@@ -289,14 +516,14 @@ PHPAPI int php_network_get_peer_name(php_socket_t sock,
 		);
 
 PHPAPI void php_any_addr(int family, php_sockaddr_storage *addr, unsigned short port);
-PHPAPI int php_sockaddr_size(php_sockaddr_storage *addr);
+PHPAPI socklen_t php_sockaddr_size(php_sockaddr_storage *addr);
 END_EXTERN_C()
 
 struct _php_netstream_data_t	{
 	php_socket_t socket;
-	char is_blocked;
+	bool is_blocked;
+	bool timeout_event;
 	struct timeval timeout;
-	char timeout_event;
 	size_t ownsize;
 };
 typedef struct _php_netstream_data_t php_netstream_data_t;
@@ -319,12 +546,12 @@ PHPAPI void php_network_populate_name_from_sockaddr(
 		socklen_t *addrlen
 		);
 
-PHPAPI int php_network_parse_network_address_with_port(const char *addr,
-		zend_long addrlen, struct sockaddr *sa, socklen_t *sl);
+PHPAPI zend_result php_network_parse_network_address_with_port(const char *addr,
+		size_t addrlen, struct sockaddr *sa, socklen_t *sl);
 
 PHPAPI struct hostent*	php_network_gethostbyname(const char *name);
 
-PHPAPI int php_set_sock_blocking(php_socket_t socketd, int block);
+PHPAPI zend_result php_set_sock_blocking(php_socket_t socketd, bool block);
 END_EXTERN_C()
 
 #define php_stream_sock_open_from_socket(socket, persistent)	_php_stream_sock_open_from_socket((socket), (persistent) STREAMS_CC)

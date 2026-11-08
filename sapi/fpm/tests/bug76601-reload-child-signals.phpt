@@ -4,6 +4,7 @@ FPM: bug76601 children should not ignore signals during concurrent reloads
 <?php
 include "skipif.inc";
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
+if (getenv("GITHUB_ACTIONS") && PHP_OS_FAMILY === "Darwin") die("skip Potential cause for GitHub Actions crash");
 ?>
 --FILE--
 <?php
@@ -63,18 +64,10 @@ for ($interval = 0; $interval < $max_interval; $interval += $step) {
 echo "Reached interval $interval us with $step us steps\n";
 $tester->expectLogNotice('Reloading in progress ...');
 /* Consume mix of 'Reloading in progress ...' and 'reloading: .*' */
-$skipped = $tester->getLogLines(2000);
+$tester->readAllLogNotices('Reloading in progress ...');
 
-$tester->signal('USR2');
-$tester->expectLogNotice('Reloading in progress ...');
-/* When a child ignores SIGQUIT, the following expectation fails due to timeout. */
-if (!$tester->expectLogNotice('reloading: .*')) {
-    /* for troubleshooting */
-    echo "Skipped messages\n";
-    echo implode('', $skipped);
-}
-$tester->expectLogNotice('using inherited socket fd=\d+, "127.0.0.1:\d+"');
-$tester->expectLogStartNotices();
+$tester->reload();
+$tester->expectLogReloadingNotices();
 
 $tester->terminate();
 $tester->expectLogTerminatingNotices();

@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Wez Furlong <wez@thebrainroom.com>                          |
    +----------------------------------------------------------------------+
@@ -42,11 +40,18 @@ typedef struct {
 	int (*writer)(void *, const char *, int);
 	PHP_FPOS_T (*seeker)(void *, PHP_FPOS_T, int);
 	int (*closer)(void *);
-} COOKIE_IO_FUNCTIONS_T;
+} cookie_io_functions_t;
 
-FILE *fopencookie(void *cookie, const char *mode, COOKIE_IO_FUNCTIONS_T *funcs)
+FILE *fopencookie(void *cookie, const char *mode, cookie_io_functions_t *funcs)
 {
-	return funopen(cookie, funcs->reader, funcs->writer, funcs->seeker, funcs->closer);
+	FILE *file = funopen(cookie, funcs->reader, funcs->writer, funcs->seeker, funcs->closer);
+	if (file) {
+		/* Buffering of FILE handles is stateful.
+		 * A bailout during these can corrupt the state of the FILE handle
+		 * and cause memory corruption errors. See GH-11078. */
+		setvbuf(file, NULL, _IONBF, 0);
+	}
+	return file;
 }
 # define HAVE_FOPENCOOKIE 1
 # define PHP_EMULATE_FOPENCOOKIE 1
@@ -104,6 +109,9 @@ static ssize_t stream_cookie_writer(void *cookie, const char *buffer, size_t siz
 
 # ifdef COOKIE_SEEKER_USES_OFF64_T
 static int stream_cookie_seeker(void *cookie, off64_t *position, int whence)
+# else
+static int stream_cookie_seeker(void *cookie, off_t *position, int whence)
+# endif
 {
 
 	*position = php_stream_seek((php_stream *)cookie, (zend_off_t)*position, whence);
@@ -113,13 +121,6 @@ static int stream_cookie_seeker(void *cookie, off64_t *position, int whence)
 	}
 	return 0;
 }
-# else
-static int stream_cookie_seeker(void *cookie, zend_off_t position, int whence)
-{
-
-	return php_stream_seek((php_stream *)cookie, position, whence);
-}
-# endif
 
 static int stream_cookie_closer(void *cookie)
 {
@@ -132,8 +133,8 @@ static int stream_cookie_closer(void *cookie)
 }
 #endif /* elif defined(HAVE_FOPENCOOKIE) */
 
-#if HAVE_FOPENCOOKIE
-static COOKIE_IO_FUNCTIONS_T stream_cookie_functions =
+#ifdef HAVE_FOPENCOOKIE
+static cookie_io_functions_t stream_cookie_functions =
 {
 	stream_cookie_reader, stream_cookie_writer,
 	stream_cookie_seeker, stream_cookie_closer
@@ -186,15 +187,15 @@ void php_stream_mode_sanitize_fdopen_fopencookie(php_stream *stream, char *resul
 	result[res_curs] = '\0';
 }
 /* }}} */
-
 /* {{{ php_stream_cast */
-PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show_err)
+PHPAPI zend_result php_stream_cast(php_stream *stream, int castas, void **ret, int show_err)
 {
 	int flags = castas & PHP_STREAM_CAST_MASK;
 	castas &= ~PHP_STREAM_CAST_MASK;
 
 	/* synchronize our buffer (if possible) */
-	if (ret && castas != PHP_STREAM_AS_FD_FOR_SELECT) {
+	if (ret && castas != PHP_STREAM_AS_FD_FOR_SELECT && castas != PHP_STREAM_AS_FD_FOR_COPY
+			&& castas != PHP_STREAM_AS_FD_FOR_POLL) {
 		php_stream_flush(stream);
 		if (stream->ops->seek && (stream->flags & PHP_STREAM_FLAG_NO_SEEK) == 0) {
 			zend_off_t dummy;
@@ -202,6 +203,16 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 			stream->ops->seek(stream, stream->position, SEEK_SET, &dummy);
 			stream->readpos = stream->writepos = 0;
 		}
+	}
+
+	if (castas == PHP_STREAM_AS_FD_FOR_COPY) {
+		if (php_stream_is_filtered(stream)) {
+			return FAILURE;
+		}
+		if (stream->ops->cast && stream->ops->cast(stream, castas, ret) == SUCCESS) {
+			return SUCCESS;
+		}
+		return FAILURE;
 	}
 
 	/* filtered streams can only be cast as stdio, and only when fopencookie is present */
@@ -224,7 +235,7 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 			goto exit_success;
 		}
 
-#if HAVE_FOPENCOOKIE
+#ifdef HAVE_FOPENCOOKIE
 		/* if just checking, say yes we can be a FILE*, but don't actually create it yet */
 		if (ret == NULL) {
 			goto exit_success;
@@ -256,7 +267,7 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 			b) no memory
 			-> lets bail
 		*/
-		php_error_docref(NULL, E_ERROR, "fopencookie failed");
+		php_stream_fatal(stream, CastFailed, "fopencookie failed");
 		return FAILURE;
 #endif
 
@@ -270,12 +281,12 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 
 			newstream = php_stream_fopen_tmpfile();
 			if (newstream) {
-				int retcopy = php_stream_copy_to_stream_ex(stream, newstream, PHP_STREAM_COPY_ALL, NULL);
+				zend_result retcopy = php_stream_copy_to_stream_ex(stream, newstream, PHP_STREAM_COPY_ALL, NULL);
 
 				if (retcopy != SUCCESS) {
 					php_stream_close(newstream);
 				} else {
-					int retcast = php_stream_cast(newstream, castas | flags, (void **)ret, show_err);
+					zend_result retcast = php_stream_cast(newstream, castas | flags, (void **)ret, show_err);
 
 					if (retcast == SUCCESS) {
 						rewind(*(FILE**)ret);
@@ -294,9 +305,11 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 		}
 	}
 
-	if (php_stream_is_filtered(stream)) {
+	if (php_stream_is_filtered(stream) && castas != PHP_STREAM_AS_FD_FOR_SELECT
+			&& castas != PHP_STREAM_AS_FD_FOR_POLL) {
 		if (show_err) {
-			php_error_docref(NULL, E_WARNING, "Cannot cast a filtered stream on this system");
+			php_stream_warn(stream, CastNotSupported,
+				"Cannot cast a filtered stream on this system");
 		}
 		return FAILURE;
 	} else if (stream->ops->cast && stream->ops->cast(stream, castas, ret) == SUCCESS) {
@@ -305,14 +318,17 @@ PHPAPI int _php_stream_cast(php_stream *stream, int castas, void **ret, int show
 
 	if (show_err) {
 		/* these names depend on the values of the PHP_STREAM_AS_XXX defines in php_streams.h */
-		static const char *cast_names[4] = {
+		static const char *cast_names[6] = {
 			"STDIO FILE*",
 			"File Descriptor",
 			"Socket Descriptor",
-			"select()able descriptor"
+			"select()able descriptor",
+			"copyable descriptor",
+			"pollable descriptor"
 		};
 
-		php_error_docref(NULL, E_WARNING, "Cannot represent a stream of type %s as a %s", stream->ops->label, cast_names[castas]);
+		php_stream_warn(stream, CastNotSupported,
+			"Cannot represent a stream of type %s as a %s", stream->ops->label, cast_names[castas]);
 	}
 
 	return FAILURE;
@@ -327,7 +343,9 @@ exit_success:
 		 * will be accessing the stream.  Emit a warning so that the end-user will
 		 * know that they should try something else */
 
-		php_error_docref(NULL, E_WARNING, ZEND_LONG_FMT " bytes of buffered data lost during stream conversion!", (zend_long)(stream->writepos - stream->readpos));
+		php_stream_warn_nt(stream, BufferedDataLost,
+			ZEND_LONG_FMT " bytes of buffered data lost during stream conversion!",
+			(zend_long)(stream->writepos - stream->readpos));
 	}
 
 	if (castas == PHP_STREAM_AS_STDIO && ret) {
@@ -367,7 +385,7 @@ PHPAPI FILE * _php_stream_open_wrapper_as_file(char *path, char *mode, int optio
 /* }}} */
 
 /* {{{ php_stream_make_seekable */
-PHPAPI int _php_stream_make_seekable(php_stream *origstream, php_stream **newstream, int flags STREAMS_DC)
+PHPAPI php_stream_make_seekable_status _php_stream_make_seekable(php_stream *origstream, php_stream **newstream, int flags STREAMS_DC)
 {
 	if (newstream == NULL) {
 		return PHP_STREAM_FAILED;

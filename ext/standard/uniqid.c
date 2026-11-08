@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Author: Stig Sæther Bakken <ssb@php.net>                             |
    +----------------------------------------------------------------------+
@@ -17,7 +15,7 @@
 #include "php.h"
 
 #include <stdlib.h>
-#if HAVE_UNISTD_H
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
@@ -31,8 +29,8 @@
 #include <sys/time.h>
 #endif
 
-#include "php_lcg.h"
-#include "php_random.h"
+#include "ext/random/php_random.h"
+#include "ext/random/php_random_csprng.h"
 
 #ifdef HAVE_GETTIMEOFDAY
 ZEND_TLS struct timeval prev_tv = { 0, 0 };
@@ -75,10 +73,9 @@ PHP_FUNCTION(uniqid)
 		uint32_t bytes;
 		double seed;
 		if (php_random_bytes_silent(&bytes, sizeof(uint32_t)) == FAILURE) {
-			seed = php_combined_lcg() * 10;
-		} else {
-			seed = ((double) bytes / UINT32_MAX) * 10.0;
+			bytes = php_random_generate_fallback_seed();
 		}
+		seed = ((double) bytes / UINT32_MAX) * 10.0;
 		uniqid = strpprintf(0, "%s%08x%05x%.8F", prefix, sec, usec, seed);
 	} else {
 		uniqid = strpprintf(0, "%s%08x%05x", prefix, sec, usec);

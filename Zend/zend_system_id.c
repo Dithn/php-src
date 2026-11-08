@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Sammy Kaye Powers <sammyk@php.net>                          |
    |          Dmitry Stogov <dmitry@php.net>                              |
@@ -19,14 +17,13 @@
 #include "zend_system_id.h"
 #include "zend_extensions.h"
 #include "ext/standard/md5.h"
-#include "ext/hash/php_hash.h"
 
 ZEND_API char zend_system_id[32];
 
 static PHP_MD5_CTX context;
 static int finalized = 0;
 
-ZEND_API ZEND_RESULT_CODE zend_add_system_entropy(const char *module_name, const char *hook_name, const void *data, size_t size)
+ZEND_API zend_result zend_add_system_entropy(const char *module_name, const char *hook_name, const void *data, size_t size)
 {
 	if (finalized == 0) {
 		PHP_MD5Update(&context, module_name, strlen(module_name));
@@ -43,6 +40,7 @@ ZEND_API ZEND_RESULT_CODE zend_add_system_entropy(const char *module_name, const
 
 void zend_startup_system_id(void)
 {
+	finalized = 0;
 	PHP_MD5Init(&context);
 	PHP_MD5Update(&context, PHP_VERSION, sizeof(PHP_VERSION)-1);
 	PHP_MD5Update(&context, ZEND_EXTENSION_BUILD_ID, sizeof(ZEND_EXTENSION_BUILD_ID)-1);
@@ -55,15 +53,16 @@ void zend_startup_system_id(void)
 	zend_system_id[0] = '\0';
 }
 
-#define ZEND_HOOK_AST_PROCESS      (1 << 0)
-#define ZEND_HOOK_COMPILE_FILE     (1 << 1)
-#define ZEND_HOOK_EXECUTE_EX       (1 << 2)
-#define ZEND_HOOK_EXECUTE_INTERNAL (1 << 3)
+#define ZEND_HOOK_AST_PROCESS        (1 << 0)
+#define ZEND_HOOK_COMPILE_FILE       (1 << 1)
+#define ZEND_HOOK_EXECUTE_EX         (1 << 2)
+#define ZEND_HOOK_EXECUTE_INTERNAL   (1 << 3)
+#define ZEND_HOOK_INTERRUPT_FUNCTION (1 << 4)
 
 void zend_finalize_system_id(void)
 {
 	unsigned char digest[16];
-	zend_uchar hooks = 0;
+	uint8_t hooks = 0;
 
 	if (zend_ast_process) {
 		hooks |= ZEND_HOOK_AST_PROCESS;
@@ -77,15 +76,33 @@ void zend_finalize_system_id(void)
 	if (zend_execute_internal) {
 		hooks |= ZEND_HOOK_EXECUTE_INTERNAL;
 	}
+	if (zend_interrupt_function) {
+		hooks |= ZEND_HOOK_INTERRUPT_FUNCTION;
+	}
 	PHP_MD5Update(&context, &hooks, sizeof hooks);
 
 	for (int16_t i = 0; i < 256; i++) {
-		if (zend_get_user_opcode_handler((zend_uchar) i) != NULL) {
+		if (zend_get_user_opcode_handler((uint8_t) i) != NULL) {
 			PHP_MD5Update(&context, &i, sizeof i);
 		}
 	}
 
+	/* Cached scripts can refer to offsets of internal functions.
+	 * Effects of disable_functions and frameless functions must be taken into account.
+	 * Therefore, embed the function names in-order.
+	 * Updating third party extensions may change function signatures, arginfo, offsets, ...
+	 * Therefore, also embed the loaded modules and their versions. */
+	ZEND_HASH_MAP_FOREACH_STR_KEY(CG(function_table), zend_string *name) {
+		PHP_MD5Update(&context, ZSTR_VAL(name), ZSTR_LEN(name) + 1);
+	} ZEND_HASH_FOREACH_END();
+	ZEND_HASH_MAP_FOREACH_PTR(&module_registry, zend_module_entry *mod) {
+		PHP_MD5Update(&context, mod->name, strlen(mod->name) + 1);
+		if (EXPECTED(mod->version != NO_VERSION_YET)) {
+			PHP_MD5Update(&context, mod->version, strlen(mod->version) + 1);
+		}
+	} ZEND_HASH_FOREACH_END();
+
 	PHP_MD5Final(digest, &context);
-	php_hash_bin2hex(zend_system_id, digest, sizeof digest);
+	zend_bin2hex(zend_system_id, digest, sizeof digest);
 	finalized = 1;
 }

@@ -4,7 +4,6 @@ JIT Shift Right: 001
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 opcache.protect_memory=1
 --EXTENSIONS--
 opcache
@@ -20,17 +19,17 @@ var_dump(shr(-8, 2));
 try {
     var_dump(shr(1, 64));
 } catch (Throwable $e) {
-    echo "Exception " . $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(shr(-1, 64));
 } catch (Throwable $e) {
-    echo "Exception " . $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(shr(1, -1));
 } catch (Throwable $e) {
-    echo "Exception (" . get_class($e) . "): " . $e->getMessage() . "\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
@@ -40,4 +39,4 @@ int(64)
 int(-2)
 int(0)
 int(-1)
-Exception (ArithmeticError): Bit shift by negative number
+ArithmeticError: Bit shift by negative number

@@ -3,7 +3,7 @@ rewriter uses arg_separator.output for modifying URLs
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --INI--
 session.use_cookies=0
 session.use_only_cookies=0
@@ -27,4 +27,7 @@ session_start();
 session_destroy();
 ?>
 --EXPECT--
+Deprecated: PHP Startup: Disabling session.use_only_cookies INI setting is deprecated in Unknown on line 0
+
+Deprecated: PHP Startup: Enabling session.use_trans_sid INI setting is deprecated in Unknown on line 0
 <a href="link.php?a=b&amp;PHPSESSID=test020">

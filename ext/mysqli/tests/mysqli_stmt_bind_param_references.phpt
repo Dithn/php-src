@@ -4,11 +4,11 @@ mysqli_stmt_bind_param() - playing with references
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require('table.inc');
+    require 'table.inc';
 
     function findRow($offset, $link, $id, $label) {
 
@@ -55,14 +55,13 @@ require_once('skipifconnectfailure.inc');
     // or we will get dups around [28]
     mysqli_query($link, "ALTER TABLE test DROP PRIMARY KEY");
 
-    $stmt = mysqli_stmt_init($link);
-    if (!mysqli_stmt_prepare($stmt, "INSERT INTO test(id, label) VALUES (?, ?)"))
-        printf("[001] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
+    if (!($stmt = mysqli_prepare($link, "INSERT INTO test(id, label) VALUES (?, ?)")))
+        printf("[001] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
 
     $id = 100;
     $label = 'v';
     if (true !== ($tmp = mysqli_stmt_bind_param($stmt, "is", $id, $label)))
-        printf("[002] Expecting boolean/false, got %s/%s\n", gettype($tmp), $tmp);
+        printf("[002] Expecting boolean/true, got %s/%s\n", gettype($tmp), $tmp);
 
     if (true !== mysqli_stmt_execute($stmt))
         printf("[003] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
@@ -201,7 +200,7 @@ require_once('skipifconnectfailure.inc');
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
 --EXPECT--
 done!

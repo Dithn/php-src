@@ -3,7 +3,7 @@ session object deserialization
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --INI--
 session.use_cookies=0
 session.use_strict_mode=0
@@ -16,6 +16,7 @@ error_reporting(E_ALL);
 
 class foo {
     public $bar = "ok";
+    public $yes;
     function method() { $this->yes++; }
 }
 

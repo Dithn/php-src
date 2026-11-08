@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Rasmus Lerdorf <rasmus@php.net>                             |
    |          Stig Bakken <ssb@php.net>                                   |
@@ -22,12 +20,11 @@
 /* Note that there is no code from the gd package in this file */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
 #include "php.h"
 #include "php_ini.h"
-#include "ext/standard/head.h"
 #include <math.h>
 #include "SAPI.h"
 #include "php_gd.h"
@@ -103,28 +100,6 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int);
    pointless warnings */
 int overflow2(int a, int b);
 
-/* Section Filters Declarations */
-/* IMPORTANT NOTE FOR NEW FILTER
- * Do not forget to update:
- * IMAGE_FILTER_MAX: define the last filter index
- * IMAGE_FILTER_MAX_ARGS: define the biggest amount of arguments
- * image_filter array in PHP_FUNCTION(imagefilter)
- * */
-#define IMAGE_FILTER_NEGATE         0
-#define IMAGE_FILTER_GRAYSCALE      1
-#define IMAGE_FILTER_BRIGHTNESS     2
-#define IMAGE_FILTER_CONTRAST       3
-#define IMAGE_FILTER_COLORIZE       4
-#define IMAGE_FILTER_EDGEDETECT     5
-#define IMAGE_FILTER_EMBOSS         6
-#define IMAGE_FILTER_GAUSSIAN_BLUR  7
-#define IMAGE_FILTER_SELECTIVE_BLUR 8
-#define IMAGE_FILTER_MEAN_REMOVAL   9
-#define IMAGE_FILTER_SMOOTH         10
-#define IMAGE_FILTER_PIXELATE       11
-#define IMAGE_FILTER_SCATTER		12
-#define IMAGE_FILTER_MAX            12
-#define IMAGE_FILTER_MAX_ARGS       6
 static void php_image_filter_negate(INTERNAL_FUNCTION_PARAMETERS);
 static void php_image_filter_grayscale(INTERNAL_FUNCTION_PARAMETERS);
 static void php_image_filter_brightness(INTERNAL_FUNCTION_PARAMETERS);
@@ -140,16 +115,12 @@ static void php_image_filter_pixelate(INTERNAL_FUNCTION_PARAMETERS);
 static void php_image_filter_scatter(INTERNAL_FUNCTION_PARAMETERS);
 
 /* End Section filters declarations */
-static gdImagePtr _php_image_create_from_string(zend_string *Data, char *tn, gdImagePtr (*ioctx_func_p)(gdIOCtxPtr));
-static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn, gdImagePtr (*func_p)(FILE *), gdImagePtr (*ioctx_func_p)(gdIOCtxPtr));
-static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn);
-static gdIOCtx *create_stream_context_from_zval(zval *to_zval);
+static gdImagePtr _php_image_create_from_string(zend_string *Data, const char *tn, gdImagePtr (*ioctx_func_p)(gdIOCtxPtr));
+static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type, const char *tn, gdImagePtr (*func_p)(FILE *), gdImagePtr (*ioctx_func_p)(gdIOCtxPtr));
+static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type);
 static gdIOCtx *create_stream_context(php_stream *stream, int close_stream);
-static gdIOCtx *create_output_context(void);
+static gdIOCtx *create_output_context(zval *to_zval, uint32_t arg_num);
 static int _php_image_type(zend_string *data);
-
-/* output streaming (formerly gd_ctx.c) */
-static void _php_image_output_ctx(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn);
 
 /*********************************************************
  *
@@ -172,14 +143,7 @@ static zend_function *php_gd_image_object_get_constructor(zend_object *object)
 	return NULL;
 }
 
-/**
- * Returns the underlying php_gd_image_object from a zend_object
- */
-
-static zend_always_inline php_gd_image_object* php_gd_exgdimage_from_zobj_p(zend_object* obj)
-{
-	return (php_gd_image_object *) ((char *) (obj) - XtOffsetOf(php_gd_image_object, std));
-}
+#define php_gd_exgdimage_from_zobj_p(obj) ZEND_CONTAINER_OF(obj, php_gd_image_object, std)
 
 /**
  * Converts an extension GdImage instance contained within a zval into the gdImagePtr
@@ -193,13 +157,10 @@ PHP_GD_API gdImagePtr php_gd_libgdimageptr_from_zval_p(zval* zp)
 
 zend_object *php_gd_image_object_create(zend_class_entry *class_type)
 {
-	size_t block_len = sizeof(php_gd_image_object) + zend_object_properties_size(class_type);
-	php_gd_image_object *intern = emalloc(block_len);
-	memset(intern, 0, block_len);
+	php_gd_image_object *intern = zend_object_alloc(sizeof(php_gd_image_object), class_type);
 
 	zend_object_std_init(&intern->std, class_type);
 	object_properties_init(&intern->std, class_type);
-	intern->std.handlers = &php_gd_image_object_handlers;
 
 	return &intern->std;
 }
@@ -229,6 +190,7 @@ static void php_gd_object_minit_helper(void)
 {
 	gd_image_ce = register_class_GdImage();
 	gd_image_ce->create_object = php_gd_image_object_create;
+	gd_image_ce->default_object_handlers = &php_gd_image_object_handlers;
 
 	/* setting up the object handlers for the GdImage class */
 	memcpy(&php_gd_image_object_handlers, &std_object_handlers, sizeof(zend_object_handlers));
@@ -236,7 +198,7 @@ static void php_gd_object_minit_helper(void)
 	php_gd_image_object_handlers.free_obj = php_gd_image_object_free;
 	php_gd_image_object_handlers.get_constructor = php_gd_image_object_get_constructor;
 	php_gd_image_object_handlers.compare = zend_objects_not_comparable;
-	php_gd_image_object_handlers.offset = XtOffsetOf(php_gd_image_object, std);
+	php_gd_image_object_handlers.offset = offsetof(php_gd_image_object, std);
 }
 
 static zend_class_entry *gd_font_ce = NULL;
@@ -301,7 +263,7 @@ static void php_gd_font_minit_helper(void)
 	php_gd_font_object_handlers.clone_obj = NULL;
 	php_gd_font_object_handlers.free_obj = php_gd_font_object_free;
 	php_gd_font_object_handlers.get_constructor = php_gd_font_object_get_constructor;
-	php_gd_font_object_handlers.offset = XtOffsetOf(php_gd_font_object, std);
+	php_gd_font_object_handlers.offset = offsetof(php_gd_font_object, std);
 }
 
 /*********************************************************
@@ -329,13 +291,22 @@ ZEND_GET_MODULE(gd)
 
 /* {{{ PHP_INI_BEGIN */
 PHP_INI_BEGIN()
-	PHP_INI_ENTRY("gd.jpeg_ignore_warning", "1", PHP_INI_ALL, NULL)
+	PHP_INI_ENTRY_EX("gd.jpeg_ignore_warning", "1", PHP_INI_ALL, NULL, zend_ini_boolean_displayer_cb)
 PHP_INI_END()
 /* }}} */
 
 /* {{{ php_gd_error_method */
 void php_gd_error_method(int type, const char *format, va_list args)
 {
+	/* Keep PHP's historical PNG warning text while bundled gd_png.c stays
+	 * identical to upstream libgd. */
+	if (strcmp(format, "gd-png: fatal libpng error: %s\n") == 0) {
+		format = "gd-png:  fatal libpng error: %s";
+	} else if (strncmp(format, "gd-png error: setjmp returns error condition",
+			sizeof("gd-png error: setjmp returns error condition") - 1) == 0) {
+		format = "gd-png error: setjmp returns error condition";
+	}
+
 	switch (type) {
 #ifndef PHP_WIN32
 		case GD_DEBUG:
@@ -350,7 +321,7 @@ void php_gd_error_method(int type, const char *format, va_list args)
 		default:
 			type = E_ERROR;
 	}
-	php_verror(NULL, "", type, format, args);
+	php_verror(NULL, type, format, args);
 }
 /* }}} */
 
@@ -367,135 +338,7 @@ PHP_MINIT_FUNCTION(gd)
 
 	REGISTER_INI_ENTRIES();
 
-	REGISTER_LONG_CONSTANT("IMG_AVIF", PHP_IMG_AVIF, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_GIF", PHP_IMG_GIF, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_JPG", PHP_IMG_JPG, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_JPEG", PHP_IMG_JPEG, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_PNG", PHP_IMG_PNG, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_WBMP", PHP_IMG_WBMP, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_XPM", PHP_IMG_XPM, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_WEBP", PHP_IMG_WEBP, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BMP", PHP_IMG_BMP, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_TGA", PHP_IMG_TGA, CONST_CS | CONST_PERSISTENT);
-
-#ifdef gdWebpLossless
-	/* constant for webp encoding */
-	REGISTER_LONG_CONSTANT("IMG_WEBP_LOSSLESS", gdWebpLossless, CONST_CS | CONST_PERSISTENT);
-#endif
-
-	/* special colours for gd */
-	REGISTER_LONG_CONSTANT("IMG_COLOR_TILED", gdTiled, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_COLOR_STYLED", gdStyled, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_COLOR_BRUSHED", gdBrushed, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_COLOR_STYLEDBRUSHED", gdStyledBrushed, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_COLOR_TRANSPARENT", gdTransparent, CONST_CS | CONST_PERSISTENT);
-
-	/* for imagefilledarc */
-	REGISTER_LONG_CONSTANT("IMG_ARC_ROUNDED", gdArc, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_ARC_PIE", gdPie, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_ARC_CHORD", gdChord, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_ARC_NOFILL", gdNoFill, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_ARC_EDGED", gdEdged, CONST_CS | CONST_PERSISTENT);
-
-	/* GD2 image format types */
-	REGISTER_LONG_CONSTANT("IMG_GD2_RAW", GD2_FMT_RAW, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_GD2_COMPRESSED", GD2_FMT_COMPRESSED, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FLIP_HORIZONTAL", PHP_GD_FLIP_HORIZONTAL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FLIP_VERTICAL", PHP_GD_FLIP_VERTICAL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FLIP_BOTH", PHP_GD_FLIP_BOTH, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_EFFECT_REPLACE", gdEffectReplace, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_EFFECT_ALPHABLEND", gdEffectAlphaBlend, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_EFFECT_NORMAL", gdEffectNormal, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_EFFECT_OVERLAY", gdEffectOverlay, CONST_CS | CONST_PERSISTENT);
-#ifdef gdEffectMultiply
-	REGISTER_LONG_CONSTANT("IMG_EFFECT_MULTIPLY", gdEffectMultiply, CONST_CS | CONST_PERSISTENT);
-#endif
-
-	REGISTER_LONG_CONSTANT("IMG_CROP_DEFAULT", GD_CROP_DEFAULT, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CROP_TRANSPARENT", GD_CROP_TRANSPARENT, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CROP_BLACK", GD_CROP_BLACK, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CROP_WHITE", GD_CROP_WHITE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CROP_SIDES", GD_CROP_SIDES, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CROP_THRESHOLD", GD_CROP_THRESHOLD, CONST_CS | CONST_PERSISTENT);
-
-
-	REGISTER_LONG_CONSTANT("IMG_BELL", GD_BELL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BESSEL", GD_BESSEL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BILINEAR_FIXED", GD_BILINEAR_FIXED, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BICUBIC", GD_BICUBIC, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BICUBIC_FIXED", GD_BICUBIC_FIXED, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BLACKMAN", GD_BLACKMAN, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BOX", GD_BOX, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_BSPLINE", GD_BSPLINE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_CATMULLROM", GD_CATMULLROM, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_GAUSSIAN", GD_GAUSSIAN, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_GENERALIZED_CUBIC", GD_GENERALIZED_CUBIC, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_HERMITE", GD_HERMITE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_HAMMING", GD_HAMMING, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_HANNING", GD_HANNING, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_MITCHELL", GD_MITCHELL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_POWER", GD_POWER, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_QUADRATIC", GD_QUADRATIC, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_SINC", GD_SINC, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_NEAREST_NEIGHBOUR", GD_NEAREST_NEIGHBOUR, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_WEIGHTED4", GD_WEIGHTED4, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_TRIANGLE", GD_TRIANGLE, CONST_CS | CONST_PERSISTENT);
-
-	REGISTER_LONG_CONSTANT("IMG_AFFINE_TRANSLATE", GD_AFFINE_TRANSLATE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_AFFINE_SCALE", GD_AFFINE_SCALE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_AFFINE_ROTATE", GD_AFFINE_ROTATE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_AFFINE_SHEAR_HORIZONTAL", GD_AFFINE_SHEAR_HORIZONTAL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_AFFINE_SHEAR_VERTICAL", GD_AFFINE_SHEAR_VERTICAL, CONST_CS | CONST_PERSISTENT);
-
-#ifdef HAVE_GD_BUNDLED
-	REGISTER_LONG_CONSTANT("GD_BUNDLED", 1, CONST_CS | CONST_PERSISTENT);
-#else
-	REGISTER_LONG_CONSTANT("GD_BUNDLED", 0, CONST_CS | CONST_PERSISTENT);
-#endif
-
-	/* Section Filters */
-	REGISTER_LONG_CONSTANT("IMG_FILTER_NEGATE", IMAGE_FILTER_NEGATE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_GRAYSCALE", IMAGE_FILTER_GRAYSCALE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_BRIGHTNESS", IMAGE_FILTER_BRIGHTNESS, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_CONTRAST", IMAGE_FILTER_CONTRAST, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_COLORIZE", IMAGE_FILTER_COLORIZE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_EDGEDETECT", IMAGE_FILTER_EDGEDETECT, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_GAUSSIAN_BLUR", IMAGE_FILTER_GAUSSIAN_BLUR, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_SELECTIVE_BLUR", IMAGE_FILTER_SELECTIVE_BLUR, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_EMBOSS", IMAGE_FILTER_EMBOSS, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_MEAN_REMOVAL", IMAGE_FILTER_MEAN_REMOVAL, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_SMOOTH", IMAGE_FILTER_SMOOTH, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_PIXELATE", IMAGE_FILTER_PIXELATE, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("IMG_FILTER_SCATTER", IMAGE_FILTER_SCATTER, CONST_CS | CONST_PERSISTENT);
-	/* End Section Filters */
-
-#ifdef GD_VERSION_STRING
-	REGISTER_STRING_CONSTANT("GD_VERSION", GD_VERSION_STRING, CONST_CS | CONST_PERSISTENT);
-#endif
-
-#if defined(GD_MAJOR_VERSION) && defined(GD_MINOR_VERSION) && defined(GD_RELEASE_VERSION) && defined(GD_EXTRA_VERSION)
-	REGISTER_LONG_CONSTANT("GD_MAJOR_VERSION", GD_MAJOR_VERSION, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("GD_MINOR_VERSION", GD_MINOR_VERSION, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("GD_RELEASE_VERSION", GD_RELEASE_VERSION, CONST_CS | CONST_PERSISTENT);
-	REGISTER_STRING_CONSTANT("GD_EXTRA_VERSION", GD_EXTRA_VERSION, CONST_CS | CONST_PERSISTENT);
-#endif
-
-
-#ifdef HAVE_GD_PNG
-
-	/*
-	 * cannot include #include "png.h"
-	 * /usr/include/pngconf.h:310:2: error: #error png.h already includes setjmp.h with some additional fixup.
-	 * as error, use the values for now...
-	 */
-	REGISTER_LONG_CONSTANT("PNG_NO_FILTER",	    0x00, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_FILTER_NONE",   0x08, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_FILTER_SUB",    0x10, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_FILTER_UP",     0x20, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_FILTER_AVG",    0x40, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_FILTER_PAETH",  0x80, CONST_CS | CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("PNG_ALL_FILTERS",   0x08 | 0x10 | 0x20 | 0x40 | 0x80, CONST_CS | CONST_PERSISTENT);
-#endif
+	register_gd_symbols(module_number);
 
 	return SUCCESS;
 }
@@ -523,7 +366,7 @@ PHP_RSHUTDOWN_FUNCTION(gd)
 /* }}} */
 
 #ifdef HAVE_GD_BUNDLED
-#define PHP_GD_VERSION_STRING "bundled (2.1.0 compatible)"
+#define PHP_GD_VERSION_STRING "bundled (2.4.0 compatible)"
 #else
 # define PHP_GD_VERSION_STRING GD_VERSION_STRING
 #endif
@@ -578,7 +421,7 @@ PHP_MINFO_FUNCTION(gd)
 
 #ifdef HAVE_GD_PNG
 	php_info_print_table_row(2, "PNG Support", "enabled");
-#ifdef HAVE_GD_BUNDLED
+#ifdef HAVE_GD_PNG_GET_VERSION_STRING
 	php_info_print_table_row(2, "libPNG Version", gdPngGetVersionString());
 #endif
 #endif
@@ -600,15 +443,11 @@ PHP_MINFO_FUNCTION(gd)
 #ifdef HAVE_GD_WEBP
 	php_info_print_table_row(2, "WebP Support", "enabled");
 #endif
-#ifdef HAVE_GD_BMP
 	php_info_print_table_row(2, "BMP Support", "enabled");
-#endif
 #ifdef HAVE_GD_AVIF
 	php_info_print_table_row(2, "AVIF Support", "enabled");
 #endif
-#ifdef HAVE_GD_TGA
 	php_info_print_table_row(2, "TGA Read Support", "enabled");
-#endif
 	php_info_print_table_end();
 	DISPLAY_INI_ENTRIES();
 }
@@ -617,9 +456,7 @@ PHP_MINFO_FUNCTION(gd)
 /* {{{ */
 PHP_FUNCTION(gd_info)
 {
-	if (zend_parse_parameters_none() == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	array_init(return_value);
 
@@ -655,21 +492,13 @@ PHP_FUNCTION(gd_info)
 #else
 	add_assoc_bool(return_value, "WebP Support", 0);
 #endif
-#ifdef HAVE_GD_BMP
 	add_assoc_bool(return_value, "BMP Support", 1);
-#else
-	add_assoc_bool(return_value, "BMP Support", 0);
-#endif
 #ifdef HAVE_GD_AVIF
 	add_assoc_bool(return_value, "AVIF Support", 1);
 #else
 	add_assoc_bool(return_value, "AVIF Support", 0);
 #endif
-#ifdef HAVE_GD_TGA
 	add_assoc_bool(return_value, "TGA Read Support", 1);
-#else
-	add_assoc_bool(return_value, "TGA Read Support", 0);
-#endif
 #ifdef USE_GD_JISX0208
 	add_assoc_bool(return_value, "JIS-mapped Japanese Font Support", 1);
 #else
@@ -689,9 +518,9 @@ PHP_FUNCTION(imageloadfont)
 	gdFontPtr font;
 	php_stream *stream;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "P", &file) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_PATH_STR(file)
+	ZEND_PARSE_PARAMETERS_END();
 
 	stream = php_stream_open_wrapper(ZSTR_VAL(file), "rb", IGNORE_PATH | REPORT_ERRORS, NULL);
 	if (stream == NULL) {
@@ -712,7 +541,7 @@ PHP_FUNCTION(imageloadfont)
 	 */
 	font = (gdFontPtr) emalloc(sizeof(gdFont));
 	b = 0;
-	while (b < hdr_size && (n = php_stream_read(stream, (char*)&font[b], hdr_size - b)) > 0) {
+	while (b < hdr_size && (n = php_stream_read(stream, (char *) font + b, hdr_size - b)) > 0) {
 		b += n;
 	}
 
@@ -743,6 +572,12 @@ PHP_FUNCTION(imageloadfont)
 		font->w = FLIPWORD(font->w);
 		font->h = FLIPWORD(font->h);
 		font->nchars = FLIPWORD(font->nchars);
+		if (overflow2(font->nchars, font->h) || overflow2(font->nchars * font->h, font->w )) {
+			php_error_docref(NULL, E_WARNING, "Error reading font, invalid font header");
+			efree(font);
+			php_stream_close(stream);
+			RETURN_FALSE;
+		}
 		body_size = font->w * font->h * font->nchars;
 	}
 
@@ -753,6 +588,7 @@ PHP_FUNCTION(imageloadfont)
 		RETURN_FALSE;
 	}
 
+	ZEND_ASSERT(body_size > 0);
 	font->data = emalloc(body_size);
 	b = 0;
 	while (b < body_size && (n = php_stream_read(stream, &font->data[b], body_size - b)) > 0) {
@@ -786,23 +622,37 @@ PHP_FUNCTION(imagesetstyle)
 	int index = 0;
 	uint32_t num_styles;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oa", &IM, gd_image_ce, &styles) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_ARRAY(styles)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	num_styles = zend_hash_num_elements(Z_ARRVAL_P(styles));
 	if (num_styles == 0) {
-		zend_argument_value_error(2, "cannot be empty");
+		zend_argument_must_not_be_empty_error(2);
 		RETURN_THROWS();
 	}
 
 	/* copy the style values in the stylearr */
-	stylearr = safe_emalloc(sizeof(int), num_styles, 0);
+	stylearr = safe_emalloc(num_styles, sizeof(int), 0);
 
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(styles), item) {
-		stylearr[index++] = zval_get_long(item);
+		bool failed = false;
+		ZVAL_DEREF(item);
+		zend_long tmp = zval_try_get_long(item, &failed);
+		if (failed) {
+			efree(stylearr);
+			zend_argument_type_error(2, "must only have elements of type int, %s given", zend_zval_type_name(item));
+			RETURN_THROWS();
+		}
+		if (ZEND_LONG_EXCEEDS_INT(tmp)) {
+			efree(stylearr);
+			zend_argument_value_error(2, "elements must be between %d and %d", INT_MIN, INT_MAX);
+			RETURN_THROWS();
+		}
+		stylearr[index++] = (int) tmp;
 	} ZEND_HASH_FOREACH_END();
 
 	gdImageSetStyle(im, stylearr, index);
@@ -819,9 +669,10 @@ PHP_FUNCTION(imagecreatetruecolor)
 	zend_long x_size, y_size;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ll", &x_size, &y_size) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(x_size)
+		Z_PARAM_LONG(y_size)
+	ZEND_PARSE_PARAMETERS_END();
 
 	if (x_size <= 0 || x_size >= INT_MAX) {
 		zend_argument_value_error(1, "must be greater than 0");
@@ -849,9 +700,9 @@ PHP_FUNCTION(imageistruecolor)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -867,16 +718,22 @@ PHP_FUNCTION(imagetruecolortopalette)
 	zend_long ncolors;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Obl", &IM, gd_image_ce, &dither, &ncolors) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_BOOL(dither)
+		Z_PARAM_LONG(ncolors)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	if (ncolors <= 0 || ZEND_LONG_INT_OVFL(ncolors)) {
-		zend_argument_value_error(3, "must be greater than 0 and less than %d", INT_MAX);
+		zend_argument_value_error(3, "must be between 1 and %d", INT_MAX);
 		RETURN_THROWS();
 	}
+
+	/* Preserve PHP's historical palette conversion behavior regardless of
+	 * whether bundled libgd was built with libimagequant support. */
+	gdImageTrueColorToPaletteSetMethod(im, GD_QUANT_JQUANT, 0);
 
 	if (gdImageTrueColorToPalette(im, dither, (int)ncolors)) {
 		RETURN_TRUE;
@@ -893,17 +750,13 @@ PHP_FUNCTION(imagepalettetotruecolor)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
-	if (gdImagePaletteToTrueColor(im) == 0) {
-		RETURN_FALSE;
-	}
-
-	RETURN_TRUE;
+	RETURN_BOOL(gdImagePaletteToTrueColor(im) != 0);
 }
 /* }}} */
 
@@ -914,9 +767,10 @@ PHP_FUNCTION(imagecolormatch)
 	gdImagePtr im1, im2;
 	int result;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OO", &IM1, gd_image_ce, &IM2, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM1, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(IM2, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im1 = php_gd_libgdimageptr_from_zval_p(IM1);
 	im2 = php_gd_libgdimageptr_from_zval_p(IM2);
@@ -926,19 +780,15 @@ PHP_FUNCTION(imagecolormatch)
 		case -1:
 			zend_argument_value_error(1, "must be TrueColor");
 			RETURN_THROWS();
-			break;
 		case -2:
 			zend_argument_value_error(2, "must be Palette");
 			RETURN_THROWS();
-			break;
 		case -3:
 			zend_argument_value_error(2, "must be the same size as argument #1 ($im1)");
 			RETURN_THROWS();
-			break;
 		case -4:
 			zend_argument_value_error(2, "must have at least one color");
 			RETURN_THROWS();
-			break;
 	}
 
 	RETURN_TRUE;
@@ -952,9 +802,10 @@ PHP_FUNCTION(imagesetthickness)
 	zend_long thick;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol", &IM, gd_image_ce, &thick) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(thick)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -971,9 +822,19 @@ PHP_FUNCTION(imagefilledellipse)
 	zend_long cx, cy, w, h, color;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce, &cx, &cy, &w, &h, &color) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(cx)
+		Z_PARAM_LONG(cy)
+		Z_PARAM_LONG(w)
+		Z_PARAM_LONG(h)
+		Z_PARAM_LONG(color)
+	ZEND_PARSE_PARAMETERS_END();
+
+    if (w < 0 || ZEND_LONG_INT_OVFL(w)) {
+        zend_argument_value_error(4, "must be between 0 and %d", INT_MAX);
+        RETURN_THROWS();
+    }
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -990,9 +851,17 @@ PHP_FUNCTION(imagefilledarc)
 	gdImagePtr im;
 	int e, st;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollllllll", &IM, gd_image_ce, &cx, &cy, &w, &h, &ST, &E, &col, &style) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(9, 9)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(cx)
+		Z_PARAM_LONG(cy)
+		Z_PARAM_LONG(w)
+		Z_PARAM_LONG(h)
+		Z_PARAM_LONG(ST)
+		Z_PARAM_LONG(E)
+		Z_PARAM_LONG(col)
+		Z_PARAM_LONG(style)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1019,9 +888,10 @@ PHP_FUNCTION(imagealphablending)
 	bool blend;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ob", &IM, gd_image_ce, &blend) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_BOOL(blend)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1038,9 +908,10 @@ PHP_FUNCTION(imagesavealpha)
 	bool save;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ob", &IM, gd_image_ce, &save) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_BOOL(save)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1057,9 +928,10 @@ PHP_FUNCTION(imagelayereffect)
 	zend_long effect;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol", &IM, gd_image_ce, &effect) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(effect)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1083,9 +955,13 @@ PHP_FUNCTION(imagecolorallocatealpha)
 	gdImagePtr im;
 	int ct = (-1);
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &IM, gd_image_ce, &red, &green, &blue, &alpha) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+		Z_PARAM_LONG(alpha)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1109,9 +985,13 @@ PHP_FUNCTION(imagecolorresolvealpha)
 	zend_long red, green, blue, alpha;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &IM, gd_image_ce, &red, &green, &blue, &alpha) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+		Z_PARAM_LONG(alpha)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1131,9 +1011,13 @@ PHP_FUNCTION(imagecolorclosestalpha)
 	zend_long red, green, blue, alpha;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &IM, gd_image_ce, &red, &green, &blue, &alpha) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+		Z_PARAM_LONG(alpha)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1153,9 +1037,13 @@ PHP_FUNCTION(imagecolorexactalpha)
 	zend_long red, green, blue, alpha;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &IM, gd_image_ce, &red, &green, &blue, &alpha) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+		Z_PARAM_LONG(alpha)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -1176,9 +1064,18 @@ PHP_FUNCTION(imagecopyresampled)
 	gdImagePtr im_dst, im_src;
 	int srcH, srcW, dstH, dstW, srcY, srcX, dstY, dstX;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OOllllllll", &DIM, gd_image_ce, &SIM, gd_image_ce, &DX, &DY, &SX, &SY, &DW, &DH, &SW, &SH) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(10, 10)
+		Z_PARAM_OBJECT_OF_CLASS(DIM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(DX)
+		Z_PARAM_LONG(DY)
+		Z_PARAM_LONG(SX)
+		Z_PARAM_LONG(SY)
+		Z_PARAM_LONG(DW)
+		Z_PARAM_LONG(DH)
+		Z_PARAM_LONG(SW)
+		Z_PARAM_LONG(SH)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 	im_dst = php_gd_libgdimageptr_from_zval_p(DIM);
@@ -1199,11 +1096,56 @@ PHP_FUNCTION(imagecopyresampled)
 /* }}} */
 
 #ifdef PHP_WIN32
+/* The bitmap must not be selected into a device context. */
+static gdImagePtr php_gd_image_from_bitmap(HDC hdc, HBITMAP bitmap, int width, int height)
+{
+	BITMAPINFO bitmap_info = {0};
+	RGBQUAD *pixels;
+	gdImagePtr im;
+	size_t num_pixels;
+	bool overflow;
+	int x, y;
+
+	bitmap_info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	bitmap_info.bmiHeader.biWidth = width;
+	/* Request a top-down DIB so its row order matches GD's. */
+	bitmap_info.bmiHeader.biHeight = -height;
+	bitmap_info.bmiHeader.biPlanes = 1;
+	bitmap_info.bmiHeader.biBitCount = 32;
+	bitmap_info.bmiHeader.biCompression = BI_RGB;
+
+	num_pixels = zend_safe_address((size_t) width, (size_t) height, 0, &overflow);
+	if (overflow) {
+		return NULL;
+	}
+
+	pixels = safe_emalloc(num_pixels, sizeof(*pixels), 0);
+	if (GetDIBits(hdc, bitmap, 0, (UINT) height, pixels, &bitmap_info, DIB_RGB_COLORS) != height) {
+		efree(pixels);
+		return NULL;
+	}
+
+	im = gdImageCreateTrueColor(width, height);
+	if (im) {
+		for (y = 0; y < height; y++) {
+			const RGBQUAD *src = pixels + (size_t) y * width;
+			int *dst = im->tpixels[y];
+
+			for (x = 0; x < width; x++) {
+				dst[x] = gdTrueColor(src[x].rgbRed, src[x].rgbGreen, src[x].rgbBlue);
+			}
+		}
+	}
+
+	efree(pixels);
+	return im;
+}
+
 /* {{{ Grab a window or its client area using a windows handle (HWND property in COM instance) */
 PHP_FUNCTION(imagegrabwindow)
 {
 	HWND window;
-	bool client_area = 0;
+	bool client_area = false;
 	RECT rc = {0};
 	int Width, Height;
 	HDC		hdc;
@@ -1213,9 +1155,11 @@ PHP_FUNCTION(imagegrabwindow)
 	zend_long lwindow_handle;
 	gdImagePtr im = NULL;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "l|b", &lwindow_handle, &client_area) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_LONG(lwindow_handle)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_BOOL(client_area)
+	ZEND_PARSE_PARAMETERS_END();
 
 	window = (HWND) lwindow_handle;
 
@@ -1244,18 +1188,8 @@ PHP_FUNCTION(imagegrabwindow)
 
 	PrintWindow(window, memDC, (UINT) client_area);
 
-	im = gdImageCreateTrueColor(Width, Height);
-	if (im) {
-		int x,y;
-		for (y=0; y <= Height; y++) {
-			for (x=0; x <= Width; x++) {
-				int c = GetPixel(memDC, x,y);
-				gdImageSetPixel(im, x, y, gdTrueColor(GetRValue(c), GetGValue(c), GetBValue(c)));
-			}
-		}
-	}
-
 	SelectObject(memDC,hOld);
+	im = php_gd_image_from_bitmap(hdc, memBM, Width, Height);
 	DeleteObject(memBM);
 	DeleteDC(memDC);
 	ReleaseDC( 0, hdc );
@@ -1281,9 +1215,7 @@ PHP_FUNCTION(imagegrabscreen)
 	gdImagePtr im;
 	hdc		= GetDC(0);
 
-	if (zend_parse_parameters_none() == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	if (!hdc) {
 		RETURN_FALSE;
@@ -1300,18 +1232,8 @@ PHP_FUNCTION(imagegrabscreen)
 	hOld	= (HBITMAP) SelectObject (memDC, memBM);
 	BitBlt( memDC, 0, 0, Width, Height , hdc, rc.left, rc.top , SRCCOPY );
 
-	im = gdImageCreateTrueColor(Width, Height);
-	if (im) {
-		int x,y;
-		for (y=0; y <= Height; y++) {
-			for (x=0; x <= Width; x++) {
-				int c = GetPixel(memDC, x,y);
-				gdImageSetPixel(im, x, y, gdTrueColor(GetRValue(c), GetGValue(c), GetBValue(c)));
-			}
-		}
-	}
-
 	SelectObject(memDC,hOld);
+	im = php_gd_image_from_bitmap(hdc, memBM, Width, Height);
 	DeleteObject(memBM);
 	DeleteDC(memDC);
 	ReleaseDC( 0, hdc );
@@ -1332,9 +1254,15 @@ PHP_FUNCTION(imagerotate)
 	gdImagePtr im_dst, im_src;
 	double degrees;
 	zend_long color;
-	bool ignoretransparent = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Odl|b", &SIM, gd_image_ce,  &degrees, &color, &ignoretransparent) == FAILURE) {
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_DOUBLE(degrees)
+		Z_PARAM_LONG(color)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (degrees < (double)(INT_MIN / 100) || degrees > (double)(INT_MAX / 100)) {
+		zend_argument_value_error(2, "must be between %d and %d", (INT_MIN / 100), (INT_MAX / 100));
 		RETURN_THROWS();
 	}
 
@@ -1355,9 +1283,10 @@ PHP_FUNCTION(imagesettile)
 	zval *IM, *TILE;
 	gdImagePtr im, tile;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OO", &IM, gd_image_ce, &TILE, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(TILE, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 	tile = php_gd_libgdimageptr_from_zval_p(TILE);
@@ -1374,9 +1303,10 @@ PHP_FUNCTION(imagesetbrush)
 	zval *IM, *TILE;
 	gdImagePtr im, tile;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OO", &IM, gd_image_ce, &TILE, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(TILE, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 	tile = php_gd_libgdimageptr_from_zval_p(TILE);
@@ -1393,9 +1323,10 @@ PHP_FUNCTION(imagecreate)
 	zend_long x_size, y_size;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ll", &x_size, &y_size) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(x_size)
+		Z_PARAM_LONG(y_size)
+	ZEND_PARSE_PARAMETERS_END();
 
 	if (x_size <= 0 || x_size >= INT_MAX) {
 		zend_argument_value_error(1, "must be greater than 0");
@@ -1435,39 +1366,15 @@ PHP_FUNCTION(imagetypes)
 #ifdef HAVE_GD_WEBP
 	ret |= PHP_IMG_WEBP;
 #endif
-#ifdef HAVE_GD_BMP
 	ret |= PHP_IMG_BMP;
-#endif
-#ifdef HAVE_GD_TGA
 	ret |= PHP_IMG_TGA;
-#endif
 #ifdef HAVE_GD_AVIF
 	ret |= PHP_IMG_AVIF;
 #endif
 
-	if (zend_parse_parameters_none() == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	RETURN_LONG(ret);
-}
-/* }}} */
-
-/* {{{ _php_ctx_getmbi */
-
-static int _php_ctx_getmbi(gdIOCtx *ctx)
-{
-	int i, mbi = 0;
-
-	do {
-		i = (ctx->getC)(ctx);
-		if (i < 0) {
-			return -1;
-		}
-		mbi = (mbi << 7) | (i & 0x7f);
-	} while (i & 0x80);
-
-	return mbi;
 }
 /* }}} */
 
@@ -1508,15 +1415,8 @@ static int _php_image_type(zend_string *data)
 		}
 	}
 
-	gdIOCtx *io_ctx;
-	io_ctx = gdNewDynamicCtxEx(8, ZSTR_VAL(data), 0);
-	if (io_ctx) {
-		if (_php_ctx_getmbi(io_ctx) == 0 && _php_ctx_getmbi(io_ctx) >= 0) {
-			io_ctx->gd_free(io_ctx);
-			return PHP_GDIMG_TYPE_WBM;
-		} else {
-			io_ctx->gd_free(io_ctx);
-		}
+	if (ZSTR_VAL(data)[0] == 0) {
+		return PHP_GDIMG_TYPE_WBM;
 	}
 
 	return -1;
@@ -1524,12 +1424,13 @@ static int _php_image_type(zend_string *data)
 /* }}} */
 
 /* {{{ _php_image_create_from_string */
-gdImagePtr _php_image_create_from_string(zend_string *data, char *tn, gdImagePtr (*ioctx_func_p)(gdIOCtxPtr))
+gdImagePtr _php_image_create_from_string(zend_string *data, const char *tn, gdImagePtr (*ioctx_func_p)(gdIOCtxPtr))
 {
 	gdImagePtr im;
 	gdIOCtx *io_ctx;
 
-	io_ctx = gdNewDynamicCtxEx(ZSTR_LEN(data), ZSTR_VAL(data), 0);
+	ZEND_ASSERT(ZSTR_LEN(data) <= INT_MAX); /* checked in imagecreatefromstring() */
+	io_ctx = gdNewDynamicCtxEx((int) ZSTR_LEN(data), ZSTR_VAL(data), 0);
 
 	if (!io_ctx) {
 		return NULL;
@@ -1555,8 +1456,12 @@ PHP_FUNCTION(imagecreatefromstring)
 	gdImagePtr im;
 	int imtype;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "S", &data) == FAILURE) {
-		RETURN_THROWS();
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(data)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (ZSTR_LEN(data) > INT_MAX) {
+		zend_argument_value_error(1, "is too long");
 	}
 
 	imtype = _php_image_type(data);
@@ -1629,7 +1534,7 @@ PHP_FUNCTION(imagecreatefromstring)
 /* }}} */
 
 /* {{{ _php_image_create_from */
-static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn, gdImagePtr (*func_p)(FILE *), gdImagePtr (*ioctx_func_p)(gdIOCtxPtr))
+static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type, const char *tn, gdImagePtr (*func_p)(FILE *), gdImagePtr (*ioctx_func_p)(gdIOCtxPtr))
 {
 	char *file;
 	size_t file_len;
@@ -1682,17 +1587,23 @@ static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type,
 		buff = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, 0);
 
 		if (!buff) {
-			php_error_docref(NULL, E_WARNING,"Cannot read image data");
+			php_error_docref(NULL, E_WARNING, "Cannot read image data");
+			goto out_err;
+		}
+
+		if (ZSTR_LEN(buff) > INT_MAX) {
+			zend_string_release_ex(buff, 0);
+			php_error_docref(NULL, E_WARNING, "Cannot read images with more than %d bytes", INT_MAX);
 			goto out_err;
 		}
 
 		/* needs to be malloc (persistent) - GD will free() it later */
 		pstr = pestrndup(ZSTR_VAL(buff), ZSTR_LEN(buff), 1);
-		io_ctx = gdNewDynamicCtxEx(ZSTR_LEN(buff), pstr, 0);
+		io_ctx = gdNewDynamicCtxEx((int) ZSTR_LEN(buff), pstr, 0);
 		if (!io_ctx) {
 			pefree(pstr, 1);
 			zend_string_release_ex(buff, 0);
-			php_error_docref(NULL, E_WARNING,"Cannot allocate GD IO context");
+			php_error_docref(NULL, E_WARNING, "Cannot allocate GD IO context");
 			goto out_err;
 		}
 
@@ -1705,7 +1616,7 @@ static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type,
 		pefree(pstr, 1);
 		zend_string_release_ex(buff, 0);
 	}
-	else if (php_stream_can_cast(stream, PHP_STREAM_AS_STDIO)) {
+	else if (php_stream_can_cast(stream, PHP_STREAM_AS_STDIO) == SUCCESS) {
 		/* try and force the stream to be FILE* */
 		if (FAILURE == php_stream_cast(stream, PHP_STREAM_AS_STDIO | PHP_STREAM_CAST_TRY_HARD, (void **) &fp, REPORT_ERRORS)) {
 			goto out_err;
@@ -1725,7 +1636,7 @@ static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type,
 
 #ifdef HAVE_GD_JPG
 			case PHP_GDIMG_TYPE_JPG:
-				ignore_warning = INI_INT("gd.jpeg_ignore_warning");
+				ignore_warning = zend_ini_bool_literal("gd.jpeg_ignore_warning");
 				im = gdImageCreateFromJpegEx(fp, ignore_warning);
 			break;
 #endif
@@ -1840,65 +1751,57 @@ PHP_FUNCTION(imagecreatefromgd2part)
 }
 /* }}} */
 
-#ifdef HAVE_GD_BMP
 /* {{{ Create a new image from BMP file or URL */
 PHP_FUNCTION(imagecreatefrombmp)
 {
 	_php_image_create_from(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_BMP, "BMP", gdImageCreateFromBmp, gdImageCreateFromBmpCtx);
 }
 /* }}} */
-#endif
 
-#ifdef HAVE_GD_TGA
 /* {{{ Create a new image from TGA file or URL */
 PHP_FUNCTION(imagecreatefromtga)
 {
 	_php_image_create_from(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_TGA, "TGA", gdImageCreateFromTga, gdImageCreateFromTgaCtx);
 }
 /* }}} */
-#endif
 
 /* {{{ _php_image_output */
-static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn)
+static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type)
 {
 	zval *imgind;
 	char *file = NULL;
-	zend_long quality = 0, type = 0;
+	zend_long quality = 128, type = 1;
 	gdImagePtr im;
-	FILE *fp;
 	size_t file_len = 0;
-	int argc = ZEND_NUM_ARGS();
-	int q = -1, t = 1;
 
 	/* The quality parameter for gd2 stands for chunk size */
 
 	switch (image_type) {
 		case PHP_GDIMG_TYPE_GD:
-			if (zend_parse_parameters(argc, "O|p!", &imgind, gd_image_ce, &file, &file_len) == FAILURE) {
+			if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|p!", &imgind, gd_image_ce, &file, &file_len) == FAILURE) {
 				RETURN_THROWS();
 			}
 			break;
 		case PHP_GDIMG_TYPE_GD2:
-			if (zend_parse_parameters(argc, "O|p!ll", &imgind, gd_image_ce, &file, &file_len, &quality, &type) == FAILURE) {
+			if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|p!ll", &imgind, gd_image_ce, &file, &file_len, &quality, &type) == FAILURE) {
 				RETURN_THROWS();
 			}
 			break;
-		EMPTY_SWITCH_DEFAULT_CASE()
+		default: ZEND_UNREACHABLE();
+	}
+
+	/* quality must fit in an int */
+	if (quality < INT_MIN || quality > INT_MAX) {
+		php_error_docref(NULL, E_WARNING, "Argument #3 ($chunk_size) must be between %d and %d", INT_MIN, INT_MAX);
+		RETURN_FALSE;
 	}
 
 	im = php_gd_libgdimageptr_from_zval_p(imgind);
 
-	if (argc >= 3) {
-		q = quality;
-		if (argc == 4) {
-			t = type;
-		}
-	}
-
 	if (file_len) {
 		PHP_GD_CHECK_OPEN_BASEDIR(file, "Invalid filename");
 
-		fp = VCWD_FOPEN(file, "wb");
+		FILE *fp = VCWD_FOPEN(file, "wb");
 		if (!fp) {
 			php_error_docref(NULL, E_WARNING, "Unable to open \"%s\" for writing", file);
 			RETURN_FALSE;
@@ -1909,17 +1812,17 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 				gdImageGd(im, fp);
 				break;
 			case PHP_GDIMG_TYPE_GD2:
-				if (q == -1) {
-					q = 128;
+				if (quality == -1) {
+					quality = 128;
 				}
-				gdImageGd2(im, fp, q, t);
+				gdImageGd2(im, fp, quality, type);
 				break;
-			EMPTY_SWITCH_DEFAULT_CASE()
+			default: ZEND_UNREACHABLE();
 		}
 		fflush(fp);
 		fclose(fp);
 	} else {
-		int   b;
+		size_t b;
 		FILE *tmp;
 		char  buf[4096];
 		zend_string *path;
@@ -1935,12 +1838,12 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 				gdImageGd(im, tmp);
 				break;
 			case PHP_GDIMG_TYPE_GD2:
-				if (q == -1) {
-					q = 128;
+				if (quality == -1) {
+					quality = 128;
 				}
-				gdImageGd2(im, tmp, q, t);
+				gdImageGd2(im, tmp, quality, type);
 				break;
-			EMPTY_SWITCH_DEFAULT_CASE()
+			default: ZEND_UNREACHABLE();
 		}
 
 		fseek(tmp, 0, SEEK_SET);
@@ -1964,31 +1867,33 @@ PHP_FUNCTION(imagexbm)
 	char *file = NULL;
 	size_t file_len = 0;
 	zend_long foreground_color;
-	bool foreground_color_is_null = 1;
+	bool foreground_color_is_null = true;
 	gdImagePtr im;
-	int i;
 	gdIOCtx *ctx = NULL;
-	php_stream *stream;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Op!|l!", &imgind, gd_image_ce, &file, &file_len, &foreground_color, &foreground_color_is_null) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_OBJECT_OF_CLASS(imgind, gd_image_ce)
+		Z_PARAM_PATH_OR_NULL(file, file_len)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG_OR_NULL(foreground_color, foreground_color_is_null)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(imgind);
 
 	if (file != NULL) {
-		stream = php_stream_open_wrapper(file, "wb", REPORT_ERRORS|IGNORE_PATH, NULL);
+		php_stream *stream = php_stream_open_wrapper(file, "wb", REPORT_ERRORS|IGNORE_PATH, NULL);
 		if (stream == NULL) {
 			RETURN_FALSE;
 		}
 
 		ctx = create_stream_context(stream, 1);
 	} else {
-		ctx = create_output_context();
+		ctx = create_output_context(NULL, 0);
 	}
 
 	if (foreground_color_is_null) {
-		for (i=0; i < gdImageColorsTotal(im); i++) {
+		int i;
+		for (i = 0; i < gdImageColorsTotal(im); i++) {
 			if (!gdImageRed(im, i) && !gdImageGreen(im, i) && !gdImageBlue(im, i)) {
 				break;
 			}
@@ -2008,7 +1913,40 @@ PHP_FUNCTION(imagexbm)
 /* {{{ Output GIF image to browser or file */
 PHP_FUNCTION(imagegif)
 {
-	_php_image_output_ctx(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_GIF, "GIF");
+	zval *imgind;
+	gdImagePtr im;
+	gdIOCtx *ctx;
+	zval *to_zval = NULL;
+	int quantization_method;
+	int quantization_speed;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!", &imgind, gd_image_ce, &to_zval) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	im = php_gd_libgdimageptr_from_zval_p(imgind);
+
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
+	}
+
+	quantization_method = im->paletteQuantizationMethod;
+	quantization_speed = im->paletteQuantizationSpeed;
+	if (im->trueColor) {
+		/* GIF conversion historically used JQUANT in PHP. Keep output stable
+		 * when bundled libgd has a build-dependent default such as LIQ. */
+		gdImageTrueColorToPaletteSetMethod(im, GD_QUANT_JQUANT, 0);
+	}
+	gdImageGifCtx(im, ctx);
+	if (im->trueColor) {
+		gdImageTrueColorToPaletteSetMethod(im, quantization_method,
+										 quantization_speed);
+	}
+
+	ctx->gd_free(ctx);
+
+	RETURN_TRUE;
 }
 /* }}} */
 
@@ -2016,7 +1954,59 @@ PHP_FUNCTION(imagegif)
 /* {{{ Output PNG image to browser or file */
 PHP_FUNCTION(imagepng)
 {
-	_php_image_output_ctx(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_PNG, "PNG");
+	zval *imgind;
+	zend_long quality = -1, basefilter = -1;
+	gdImagePtr im;
+	gdIOCtx *ctx;
+	zval *to_zval = NULL;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!ll", &imgind, gd_image_ce, &to_zval, &quality, &basefilter) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	im = php_gd_libgdimageptr_from_zval_p(imgind);
+
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
+	}
+
+	if (quality < -1 || quality > 9) {
+		zend_argument_value_error(3, "must be between -1 and 9");
+		ctx->gd_free(ctx);
+		RETURN_THROWS();
+	}
+
+#ifdef HAVE_GD_BUNDLED
+	{
+		gdPngWriteOptions options;
+		unsigned int filters = GD_PNG_FILTER_NONE;
+		unsigned int unknown_filters;
+
+		gdPngWriteOptionsInit(&options);
+		options.compression_level = (int) quality;
+		if (basefilter >= 0) {
+			unsigned long php_filters = (unsigned long) basefilter;
+			if (php_filters & 0x08) filters |= GD_PNG_FILTER_NONE;
+			if (php_filters & 0x10) filters |= GD_PNG_FILTER_SUB;
+			if (php_filters & 0x20) filters |= GD_PNG_FILTER_UP;
+			if (php_filters & 0x40) filters |= GD_PNG_FILTER_AVERAGE;
+			if (php_filters & 0x80) filters |= GD_PNG_FILTER_PAETH;
+			unknown_filters = (unsigned int) (php_filters & ~0xf8UL);
+			if (unknown_filters != 0) {
+				filters |= 1U << 31;
+			}
+		}
+		options.filters = filters;
+		(void) gdImagePngCtxWithOptions(im, ctx, &options);
+	}
+#else
+	gdImagePngCtxEx(im, ctx, (int) quality);
+#endif
+
+	ctx->gd_free(ctx);
+
+	RETURN_TRUE;
 }
 /* }}} */
 #endif /* HAVE_GD_PNG */
@@ -2025,7 +2015,34 @@ PHP_FUNCTION(imagepng)
 /* {{{ Output WEBP image to browser or file */
 PHP_FUNCTION(imagewebp)
 {
-	_php_image_output_ctx(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_WEBP, "WEBP");
+	zval *imgind;
+	zend_long quality = -1;
+	gdImagePtr im;
+	gdIOCtx *ctx;
+	zval *to_zval = NULL;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!l", &imgind, gd_image_ce, &to_zval, &quality) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	im = php_gd_libgdimageptr_from_zval_p(imgind);
+
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
+	}
+
+	if (quality < -1) {
+		zend_argument_value_error(3, "must be greater than or equal to -1");
+		ctx->gd_free(ctx);
+		RETURN_THROWS();
+	}
+
+	gdImageWebpCtx(im, ctx, (int) quality);
+
+	ctx->gd_free(ctx);
+
+	RETURN_TRUE;
 }
 /* }}} */
 #endif /* HAVE_GD_WEBP */
@@ -2034,7 +2051,42 @@ PHP_FUNCTION(imagewebp)
 /* {{{ Output AVIF image to browser or file */
 PHP_FUNCTION(imageavif)
 {
-	_php_image_output_ctx(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_AVIF, "AVIF");
+	zval *imgind;
+	zend_long quality = -1, speed = -1;
+	gdImagePtr im;
+	gdIOCtx *ctx;
+	zval *to_zval = NULL;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!ll", &imgind, gd_image_ce, &to_zval, &quality, &speed) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	im = php_gd_libgdimageptr_from_zval_p(imgind);
+
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
+	}
+
+	if (quality < -1 || quality > 100) {
+		zend_argument_value_error(3, "must be between -1 and 100");
+		ctx->gd_free(ctx);
+		RETURN_THROWS();
+	}
+
+	if (speed < -1 || speed > 10) {
+		zend_argument_value_error(4, "must be between -1 and 10");
+		ctx->gd_free(ctx);
+		RETURN_THROWS();
+	} else if (speed == -1) {
+		speed = 6;
+	}
+
+	gdImageAvifCtx(im, ctx, (int) quality, (int) speed);
+
+	ctx->gd_free(ctx);
+
+	RETURN_TRUE;
 }
 /* }}} */
 #endif /* HAVE_GD_AVIF */
@@ -2043,7 +2095,34 @@ PHP_FUNCTION(imageavif)
 /* {{{ Output JPEG image to browser or file */
 PHP_FUNCTION(imagejpeg)
 {
-	_php_image_output_ctx(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_JPG, "JPEG");
+	zval *imgind;
+	zend_long quality = -1;
+	gdImagePtr im;
+	gdIOCtx *ctx;
+	zval *to_zval = NULL;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!l", &imgind, gd_image_ce, &to_zval, &quality) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	im = php_gd_libgdimageptr_from_zval_p(imgind);
+
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
+	}
+
+	if (quality < -1 || quality > 100) {
+		zend_argument_value_error(3, "must be at between -1 and 100");
+		ctx->gd_free(ctx);
+		RETURN_THROWS();
+	}
+
+	gdImageJpegCtx(im, ctx, (int) quality);
+
+	ctx->gd_free(ctx);
+
+	RETURN_TRUE;
 }
 /* }}} */
 #endif /* HAVE_GD_JPG */
@@ -2053,29 +2132,28 @@ PHP_FUNCTION(imagewbmp)
 {
 	zval *imgind;
 	zend_long foreground_color;
-	zend_long foreground_color_is_null = 1;
+	bool foreground_color_is_null = true;
 	gdImagePtr im;
-	int i;
-	gdIOCtx *ctx = NULL;
+	gdIOCtx *ctx;
 	zval *to_zval = NULL;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!l!", &imgind, gd_image_ce, &to_zval, &foreground_color, &foreground_color_is_null) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 3)
+		Z_PARAM_OBJECT_OF_CLASS(imgind, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL_OR_NULL(to_zval)
+		Z_PARAM_LONG_OR_NULL(foreground_color, foreground_color_is_null)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(imgind);
 
-	if (to_zval != NULL) {
-		ctx = create_stream_context_from_zval(to_zval);
-		if (!ctx) {
-			RETURN_FALSE;
-		}
-	} else {
-		ctx = create_output_context();
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
 	}
 
 	if (foreground_color_is_null) {
-		for (i=0; i < gdImageColorsTotal(im); i++) {
+		int i;
+		for (i = 0; i < gdImageColorsTotal(im); i++) {
 			if (!gdImageRed(im, i) && !gdImageGreen(im, i) && !gdImageBlue(im, i)) {
 				break;
 			}
@@ -2095,40 +2173,38 @@ PHP_FUNCTION(imagewbmp)
 /* {{{ Output GD image to browser or file */
 PHP_FUNCTION(imagegd)
 {
-	_php_image_output(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_GD, "GD");
+	_php_image_output(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_GD);
 }
 /* }}} */
 
 /* {{{ Output GD2 image to browser or file */
 PHP_FUNCTION(imagegd2)
 {
-	_php_image_output(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_GD2, "GD2");
+	_php_image_output(INTERNAL_FUNCTION_PARAM_PASSTHRU, PHP_GDIMG_TYPE_GD2);
 }
 /* }}} */
 
-#ifdef HAVE_GD_BMP
 /* {{{ Output BMP image to browser or file */
 PHP_FUNCTION(imagebmp)
 {
 	zval *imgind;
-	bool compressed = 1;
+	bool compressed = true;
 	gdImagePtr im;
-	gdIOCtx *ctx = NULL;
+	gdIOCtx *ctx;
 	zval *to_zval = NULL;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!b", &imgind, gd_image_ce, &to_zval, &compressed) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 3)
+		Z_PARAM_OBJECT_OF_CLASS(imgind, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL_OR_NULL(to_zval)
+		Z_PARAM_BOOL(compressed)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(imgind);
 
-	if (to_zval != NULL) {
-		ctx = create_stream_context_from_zval(to_zval);
-		if (!ctx) {
-			RETURN_FALSE;
-		}
-	} else {
-		ctx = create_output_context();
+	ctx = create_output_context(to_zval, 2);
+	if (!ctx) {
+		RETURN_FALSE;
 	}
 
 	gdImageBmpCtx(im, ctx, (int) compressed);
@@ -2138,7 +2214,6 @@ PHP_FUNCTION(imagebmp)
 	RETURN_TRUE;
 }
 /* }}} */
-#endif
 
 /* {{{ Destroy an image - No effect as of PHP 8.0 */
 PHP_FUNCTION(imagedestroy)
@@ -2146,9 +2221,9 @@ PHP_FUNCTION(imagedestroy)
 	/* This function used to free the resource, as resources are no longer used, it does nothing */
 	zval *IM;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	RETURN_TRUE;
 }
@@ -2160,11 +2235,14 @@ PHP_FUNCTION(imagecolorallocate)
 	zval *IM;
 	zend_long red, green, blue;
 	gdImagePtr im;
-	int ct = (-1);
+	int ct = -1;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &red, &green, &blue) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2186,9 +2264,10 @@ PHP_FUNCTION(imagepalettecopy)
 	zval *dstim, *srcim;
 	gdImagePtr dst, src;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OO", &dstim, gd_image_ce, &srcim, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(dstim, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(srcim, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	src = php_gd_libgdimageptr_from_zval_p(srcim);
 	dst = php_gd_libgdimageptr_from_zval_p(dstim);
@@ -2237,9 +2316,12 @@ PHP_FUNCTION(imagecolorclosest)
 	zend_long red, green, blue;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &red, &green, &blue) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2258,9 +2340,12 @@ PHP_FUNCTION(imagecolorclosesthwb)
 	zend_long red, green, blue;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &red, &green, &blue) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2280,9 +2365,10 @@ PHP_FUNCTION(imagecolordeallocate)
 	int col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol", &IM, gd_image_ce, &index) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2310,9 +2396,12 @@ PHP_FUNCTION(imagecolorresolve)
 	zend_long red, green, blue;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &red, &green, &blue) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2331,9 +2420,12 @@ PHP_FUNCTION(imagecolorexact)
 	zend_long red, green, blue;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &red, &green, &blue) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2353,15 +2445,22 @@ PHP_FUNCTION(imagecolorset)
 	int col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll|l", &IM, gd_image_ce, &color, &red, &green, &blue, &alpha) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(color)
+		Z_PARAM_LONG(red)
+		Z_PARAM_LONG(green)
+		Z_PARAM_LONG(blue)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(alpha)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
-	CHECK_RGBA_RANGE(red, Red, 2);
-	CHECK_RGBA_RANGE(green, Green, 3);
-	CHECK_RGBA_RANGE(blue, Blue, 4);
+	CHECK_RGBA_RANGE(red, Red, 3);
+	CHECK_RGBA_RANGE(green, Green, 4);
+	CHECK_RGBA_RANGE(blue, Blue, 5);
+	CHECK_RGBA_RANGE(alpha, Alpha, 6);
 
 	col = color;
 
@@ -2384,16 +2483,17 @@ PHP_FUNCTION(imagecolorsforindex)
 	int col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol", &IM, gd_image_ce, &index) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	col = index;
 
 	if ((col >= 0 && gdImageTrueColor(im)) || (!gdImageTrueColor(im) && col >= 0 && col < gdImageColorsTotal(im))) {
-		array_init(return_value);
+		array_init_size(return_value, 4);
 
 		add_assoc_long(return_value,"red",  gdImageRed(im,col));
 		add_assoc_long(return_value,"green", gdImageGreen(im,col));
@@ -2411,15 +2511,21 @@ PHP_FUNCTION(imagegammacorrect)
 {
 	zval *IM;
 	gdImagePtr im;
-	int i;
 	double input, output, gamma;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Odd", &IM, gd_image_ce, &input, &output) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_DOUBLE(input)
+		Z_PARAM_DOUBLE(output)
+	ZEND_PARSE_PARAMETERS_END();
 
 	if (input <= 0.0) {
 		zend_argument_value_error(2, "must be greater than 0");
+		RETURN_THROWS();
+	}
+
+	if (!zend_finite(input)) {
+		zend_argument_value_error(2, "must be finite");
 		RETURN_THROWS();
 	}
 
@@ -2428,16 +2534,19 @@ PHP_FUNCTION(imagegammacorrect)
 		RETURN_THROWS();
 	}
 
+	if (!zend_finite(output)) {
+		zend_argument_value_error(3, "must be finite");
+		RETURN_THROWS();
+	}
+
 	gamma = input / output;
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	if (gdImageTrueColor(im))	{
-		int x, y, c;
-
-		for (y = 0; y < gdImageSY(im); y++)	{
-			for (x = 0; x < gdImageSX(im); x++)	{
-				c = gdImageGetPixel(im, x, y);
+		for (int y = 0; y < gdImageSY(im); y++)	{
+			for (int x = 0; x < gdImageSX(im); x++)	{
+				int c = gdImageGetPixel(im, x, y);
 				gdImageSetPixel(im, x, y,
 					gdTrueColorAlpha(
 						(int) ((pow((gdTrueColorGetRed(c)   / 255.0), gamma) * 255) + .5),
@@ -2451,7 +2560,7 @@ PHP_FUNCTION(imagegammacorrect)
 		RETURN_TRUE;
 	}
 
-	for (i = 0; i < gdImageColorsTotal(im); i++) {
+	for (int i = 0; i < gdImageColorsTotal(im); i++) {
 		im->red[i]   = (int)((pow((im->red[i]   / 255.0), gamma) * 255) + .5);
 		im->green[i] = (int)((pow((im->green[i] / 255.0), gamma) * 255) + .5);
 		im->blue[i]  = (int)((pow((im->blue[i]  / 255.0), gamma) * 255) + .5);
@@ -2489,9 +2598,15 @@ PHP_FUNCTION(imageline)
 	zend_long x1, y1, x2, y2, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce,  &x1, &y1, &x2, &y2, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x1)
+		Z_PARAM_LONG(y1)
+		Z_PARAM_LONG(x2)
+		Z_PARAM_LONG(y2)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
+
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2511,9 +2626,14 @@ PHP_FUNCTION(imagedashedline)
 	zend_long x1, y1, x2, y2, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce, &x1, &y1, &x2, &y2, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x1)
+		Z_PARAM_LONG(y1)
+		Z_PARAM_LONG(x2)
+		Z_PARAM_LONG(y2)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2529,9 +2649,14 @@ PHP_FUNCTION(imagerectangle)
 	zend_long x1, y1, x2, y2, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce, &x1, &y1, &x2, &y2, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x1)
+		Z_PARAM_LONG(y1)
+		Z_PARAM_LONG(x2)
+		Z_PARAM_LONG(y2)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2547,9 +2672,14 @@ PHP_FUNCTION(imagefilledrectangle)
 	zend_long x1, y1, x2, y2, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce, &x1, &y1, &x2, &y2, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x1)
+		Z_PARAM_LONG(y1)
+		Z_PARAM_LONG(x2)
+		Z_PARAM_LONG(y2)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 	gdImageFilledRectangle(im, x1, y1, x2, y2, col);
@@ -2565,9 +2695,16 @@ PHP_FUNCTION(imagearc)
 	gdImagePtr im;
 	int e, st;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllllll", &IM, gd_image_ce, &cx, &cy, &w, &h, &ST, &E, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(8, 8)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(cx)
+		Z_PARAM_LONG(cy)
+		Z_PARAM_LONG(w)
+		Z_PARAM_LONG(h)
+		Z_PARAM_LONG(ST)
+		Z_PARAM_LONG(E)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2593,9 +2730,14 @@ PHP_FUNCTION(imageellipse)
 	zend_long cx, cy, w, h, color;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olllll", &IM, gd_image_ce,  &cx, &cy, &w, &h, &color) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(cx)
+		Z_PARAM_LONG(cy)
+		Z_PARAM_LONG(w)
+		Z_PARAM_LONG(h)
+		Z_PARAM_LONG(color)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2611,9 +2753,13 @@ PHP_FUNCTION(imagefilltoborder)
 	zend_long x, y, border, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &IM, gd_image_ce,  &x, &y, &border, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x)
+		Z_PARAM_LONG(y)
+		Z_PARAM_LONG(border)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2629,9 +2775,12 @@ PHP_FUNCTION(imagefill)
 	zend_long x, y, col;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll", &IM, gd_image_ce, &x, &y, &col) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(x)
+		Z_PARAM_LONG(y)
+		Z_PARAM_LONG(col)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2646,9 +2795,9 @@ PHP_FUNCTION(imagecolorstotal)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2661,12 +2810,14 @@ PHP_FUNCTION(imagecolortransparent)
 {
 	zval *IM;
 	zend_long COL = 0;
-	bool COL_IS_NULL = 1;
+	bool COL_IS_NULL = true;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|l!", &IM, gd_image_ce, &COL, &COL_IS_NULL) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG_OR_NULL(COL, COL_IS_NULL)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2682,13 +2833,15 @@ PHP_FUNCTION(imagecolortransparent)
 PHP_FUNCTION(imageinterlace)
 {
 	zval *IM;
-	bool INT = 0;
-	bool INT_IS_NULL = 1;
+	bool INT = false;
+	bool INT_IS_NULL = true;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|b!", &IM, gd_image_ce, &INT, &INT_IS_NULL) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_BOOL_OR_NULL(INT, INT_IS_NULL)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -2709,15 +2862,20 @@ static void php_imagepolygon(INTERNAL_FUNCTION_PARAMETERS, int filled)
 {
 	zval *IM, *POINTS;
 	zend_long NPOINTS, COL;
-	bool COL_IS_NULL = 1;
+	bool COL_IS_NULL = true;
 	zval *var = NULL;
 	gdImagePtr im;
 	gdPointPtr points;
-	int npoints, col, nelem, i;
+	int npoints, col, nelem;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oal|l!", &IM, gd_image_ce, &POINTS, &NPOINTS, &COL, &COL_IS_NULL) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_ARRAY(POINTS)
+		Z_PARAM_LONG(NPOINTS)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG_OR_NULL(COL, COL_IS_NULL)
+	ZEND_PARSE_PARAMETERS_END();
+
 	if (COL_IS_NULL) {
 		COL = NPOINTS;
 		NPOINTS = zend_hash_num_elements(Z_ARRVAL_P(POINTS));
@@ -2748,7 +2906,7 @@ static void php_imagepolygon(INTERNAL_FUNCTION_PARAMETERS, int filled)
 
 	points = (gdPointPtr) safe_emalloc(npoints, sizeof(gdPoint), 0);
 
-	for (i = 0; i < npoints; i++) {
+	for (int i = 0; i < npoints; i++) {
 		if ((var = zend_hash_index_find(Z_ARRVAL_P(POINTS), (i * 2))) != NULL) {
 			points[i].x = zval_get_long(var);
 		}
@@ -2824,8 +2982,8 @@ static gdFontPtr php_find_gd_font(zend_object *font_obj, zend_long font_int)
  */
 static void php_imagefontsize(INTERNAL_FUNCTION_PARAMETERS, int arg)
 {
-	zend_object *font_obj;
-	zend_long font_int;
+	zend_object *font_obj = NULL;
+	zend_long font_int = 0;
 	gdFontPtr font;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
@@ -2887,21 +3045,21 @@ static void php_imagechar(INTERNAL_FUNCTION_PARAMETERS, int mode)
 {
 	zval *IM;
 	zend_long X, Y, COL;
-	char *C;
-	size_t C_len;
+	zend_string *C;
 	gdImagePtr im;
-	int ch = 0, col, x, y, i, l = 0;
+	int ch = 0, col, i;
+	unsigned int x, y;
+	size_t l = 0;
 	unsigned char *str = NULL;
-	zend_object *font_obj;
-	zend_long font_int;
-	gdFontPtr font;
+	zend_object *font_obj = NULL;
+	zend_long font_int = 0;
 
 	ZEND_PARSE_PARAMETERS_START(6, 6)
 		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
 		Z_PARAM_OBJ_OF_CLASS_OR_LONG(font_obj, gd_font_ce, font_int)
 		Z_PARAM_LONG(X)
 		Z_PARAM_LONG(Y)
-		Z_PARAM_STRING(C, C_len)
+		Z_PARAM_STR(C)
 		Z_PARAM_LONG(COL)
 	ZEND_PARSE_PARAMETERS_END();
 
@@ -2910,34 +3068,34 @@ static void php_imagechar(INTERNAL_FUNCTION_PARAMETERS, int mode)
 	col = COL;
 
 	if (mode < 2) {
-		ch = (int)((unsigned char)*C);
+		ch = (int)((unsigned char)*ZSTR_VAL(C));
 	} else {
-		str = (unsigned char *) estrndup(C, C_len);
+		str = (unsigned char *) estrndup(ZSTR_VAL(C), ZSTR_LEN(C));
 		l = strlen((char *)str);
 	}
 
 	y = Y;
 	x = X;
 
-	font = php_find_gd_font(font_obj, font_int);
+	gdFontPtr font = php_find_gd_font(font_obj, font_int);
 
 	switch (mode) {
 		case 0:
-			gdImageChar(im, font, x, y, ch, col);
+			gdImageChar(im, font, (int)x, (int)y, ch, col);
 			break;
 		case 1:
 			php_gdimagecharup(im, font, x, y, ch, col);
 			break;
 		case 2:
 			for (i = 0; (i < l); i++) {
-				gdImageChar(im, font, x, y, (int) ((unsigned char) str[i]), col);
+				gdImageChar(im, font, (int)x, (int)y, (int) ((unsigned char) str[i]), col);
 				x += font->w;
 			}
 			break;
 		case 3: {
 			for (i = 0; (i < l); i++) {
 				/* php_gdimagecharup(im, font, x, y, (int) str[i], col); */
-				gdImageCharUp(im, font, x, y, (int) str[i], col);
+				gdImageCharUp(im, font, (int)x, (int)y, (int) str[i], col);
 				y -= font->w;
 			}
 			break;
@@ -2986,9 +3144,16 @@ PHP_FUNCTION(imagecopy)
 	gdImagePtr im_dst, im_src;
 	int srcH, srcW, srcY, srcX, dstY, dstX;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OOllllll", &DIM, gd_image_ce, &SIM, gd_image_ce, &DX, &DY, &SX, &SY, &SW, &SH) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(8, 8)
+		Z_PARAM_OBJECT_OF_CLASS(DIM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(DX)
+		Z_PARAM_LONG(DY)
+		Z_PARAM_LONG(SX)
+		Z_PARAM_LONG(SY)
+		Z_PARAM_LONG(SW)
+		Z_PARAM_LONG(SH)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_dst = php_gd_libgdimageptr_from_zval_p(DIM);
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
@@ -3013,9 +3178,17 @@ PHP_FUNCTION(imagecopymerge)
 	gdImagePtr im_dst, im_src;
 	int srcH, srcW, srcY, srcX, dstY, dstX, pct;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OOlllllll", &DIM, gd_image_ce, &SIM, gd_image_ce, &DX, &DY, &SX, &SY, &SW, &SH, &PCT) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(9, 9)
+		Z_PARAM_OBJECT_OF_CLASS(DIM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(DX)
+		Z_PARAM_LONG(DY)
+		Z_PARAM_LONG(SX)
+		Z_PARAM_LONG(SY)
+		Z_PARAM_LONG(SW)
+		Z_PARAM_LONG(SH)
+		Z_PARAM_LONG(PCT)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 	im_dst = php_gd_libgdimageptr_from_zval_p(DIM);
@@ -3041,9 +3214,17 @@ PHP_FUNCTION(imagecopymergegray)
 	gdImagePtr im_dst, im_src;
 	int srcH, srcW, srcY, srcX, dstY, dstX, pct;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OOlllllll", &DIM, gd_image_ce, &SIM, gd_image_ce, &DX, &DY, &SX, &SY, &SW, &SH, &PCT) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(9, 9)
+		Z_PARAM_OBJECT_OF_CLASS(DIM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(DX)
+		Z_PARAM_LONG(DY)
+		Z_PARAM_LONG(SX)
+		Z_PARAM_LONG(SY)
+		Z_PARAM_LONG(SW)
+		Z_PARAM_LONG(SH)
+		Z_PARAM_LONG(PCT)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 	im_dst = php_gd_libgdimageptr_from_zval_p(DIM);
@@ -3069,9 +3250,18 @@ PHP_FUNCTION(imagecopyresized)
 	gdImagePtr im_dst, im_src;
 	int srcH, srcW, dstH, dstW, srcY, srcX, dstY, dstX;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "OOllllllll", &DIM, gd_image_ce, &SIM, gd_image_ce, &DX, &DY, &SX, &SY, &DW, &DH, &SW, &SH) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(10, 10)
+		Z_PARAM_OBJECT_OF_CLASS(DIM, gd_image_ce)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(DX)
+		Z_PARAM_LONG(DY)
+		Z_PARAM_LONG(SX)
+		Z_PARAM_LONG(SY)
+		Z_PARAM_LONG(DW)
+		Z_PARAM_LONG(DH)
+		Z_PARAM_LONG(SW)
+		Z_PARAM_LONG(SH)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 	im_dst = php_gd_libgdimageptr_from_zval_p(DIM);
@@ -3086,22 +3276,22 @@ PHP_FUNCTION(imagecopyresized)
 	dstW = DW;
 
 	if (dstW <= 0) {
-		zend_argument_value_error(3, "must be greater than 0");
+		zend_argument_value_error(7, "must be greater than 0");
 		RETURN_THROWS();
 	}
 
 	if (dstH <= 0) {
-		zend_argument_value_error(4, "must be greater than 0");
+		zend_argument_value_error(8, "must be greater than 0");
 		RETURN_THROWS();
 	}
 
 	if (srcW <= 0) {
-		zend_argument_value_error(5, "must be greater than 0");
+		zend_argument_value_error(9, "must be greater than 0");
 		RETURN_THROWS();
 	}
 
 	if (srcH <= 0) {
-		zend_argument_value_error(6, "must be greater than 0");
+		zend_argument_value_error(10, "must be greater than 0");
 		RETURN_THROWS();
 	}
 
@@ -3116,9 +3306,9 @@ PHP_FUNCTION(imagesx)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -3132,9 +3322,9 @@ PHP_FUNCTION(imagesy)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -3149,9 +3339,13 @@ PHP_FUNCTION(imagesetclip)
 	gdImagePtr im;
 	zend_long x1, y1, x2, y2;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll", &im_zval, gd_image_ce, &x1, &y1, &x2, &y2) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_OBJECT_OF_CLASS(im_zval, gd_image_ce)
+		Z_PARAM_LONG(x1)
+		Z_PARAM_LONG(y1)
+		Z_PARAM_LONG(x2)
+		Z_PARAM_LONG(y2)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(im_zval);
 
@@ -3167,26 +3361,28 @@ PHP_FUNCTION(imagegetclip)
 	gdImagePtr im;
 	int x1, y1, x2, y2;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &im_zval, gd_image_ce) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(im_zval, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(im_zval);
 
 	gdImageGetClip(im, &x1, &y1, &x2, &y2);
 
-	array_init(return_value);
-	add_next_index_long(return_value, x1);
-	add_next_index_long(return_value, y1);
-	add_next_index_long(return_value, x2);
-	add_next_index_long(return_value, y2);
+	array_init_size(return_value, 4);
+	zend_hash_real_init_packed(Z_ARRVAL_P(return_value));
+	add_index_long(return_value, 0, x1);
+	add_index_long(return_value, 1, y1);
+	add_index_long(return_value, 2, x2);
+	add_index_long(return_value, 3, y2);
 }
 /* }}} */
+
+#ifdef HAVE_GD_FREETYPE
 
 #define TTFTEXT_DRAW 0
 #define TTFTEXT_BBOX 1
 
-#ifdef HAVE_GD_FREETYPE
 /* {{{ Give the bounding box of a text using fonts via freetype2 */
 PHP_FUNCTION(imageftbbox)
 {
@@ -3225,6 +3421,19 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int mode)
 		im = php_gd_libgdimageptr_from_zval_p(IM);
 	}
 
+	uint32_t ptsize_arg_num = mode == TTFTEXT_BBOX ? 1 : 2;
+
+	// FT_F26Dot6 is a signed long alias
+	if (ptsize < (double)LONG_MIN / 64 || ptsize >= (double)LONG_MAX / 64) {
+		zend_argument_value_error(ptsize_arg_num, "must be between " ZEND_LONG_FMT " and " ZEND_LONG_FMT, (zend_long)(LONG_MIN / 64), (zend_long)(LONG_MAX / 64));
+		RETURN_THROWS();
+	}
+
+	if (UNEXPECTED(!zend_finite(ptsize))) {
+		zend_argument_value_error(ptsize_arg_num, "must be finite");
+		RETURN_THROWS();
+	}
+
 	/* convert angle to radians */
 	angle = angle * (M_PI/180);
 
@@ -3246,18 +3455,7 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int mode)
 		}
 	}
 
-#ifdef VIRTUAL_DIR
-	{
-		char tmp_font_path[MAXPATHLEN];
-
-		if (!VCWD_REALPATH(fontname, tmp_font_path)) {
-			fontname = NULL;
-		}
-	}
-#endif /* VIRTUAL_DIR */
-
-	PHP_GD_CHECK_OPEN_BASEDIR(fontname, "Invalid font filename");
-
+	// libgd note: Those should return const char * ideally, but backward compatibility ..
 	if (EXT) {
 		error = gdImageStringFTEx(im, brect, col, fontname, ptsize, angle, x, y, str, &strex);
 	} else {
@@ -3269,11 +3467,12 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int mode)
 		RETURN_FALSE;
 	}
 
-	array_init(return_value);
+	array_init_size(return_value, 8);
+	zend_hash_real_init_packed(Z_ARRVAL_P(return_value));
 
 	/* return array with the text's bounding box */
 	for (i = 0; i < 8; i++) {
-		add_next_index_long(return_value, brect[i]);
+		add_index_long(return_value, i, brect[i]);
 	}
 }
 /* }}} */
@@ -3292,22 +3491,14 @@ static void php_image_filter_negate(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageNegate(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageNegate(im_src) == 1);
 }
 
 static void php_image_filter_grayscale(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageGrayScale(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageGrayScale(im_src) == 1);
 }
 
 static void php_image_filter_brightness(INTERNAL_FUNCTION_PARAMETERS)
@@ -3316,17 +3507,15 @@ static void php_image_filter_brightness(INTERNAL_FUNCTION_PARAMETERS)
 	gdImagePtr im_src;
 	zend_long brightness, tmp;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oll", &SIM, gd_image_ce, &tmp, &brightness) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_LONG(brightness)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 
-	if (gdImageBrightness(im_src, (int)brightness) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageBrightness(im_src, (int)brightness) == 1);
 }
 
 static void php_image_filter_contrast(INTERNAL_FUNCTION_PARAMETERS)
@@ -3335,17 +3524,15 @@ static void php_image_filter_contrast(INTERNAL_FUNCTION_PARAMETERS)
 	gdImagePtr im_src;
 	zend_long contrast, tmp;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oll", &SIM, gd_image_ce, &tmp, &contrast) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_LONG(contrast)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 
-	if (gdImageContrast(im_src, (int)contrast) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageContrast(im_src, (int)contrast) == 1);
 }
 
 static void php_image_filter_colorize(INTERNAL_FUNCTION_PARAMETERS)
@@ -3355,72 +3542,54 @@ static void php_image_filter_colorize(INTERNAL_FUNCTION_PARAMETERS)
 	zend_long r,g,b,tmp;
 	zend_long a = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ollll|l", &SIM, gd_image_ce, &tmp, &r, &g, &b, &a) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(5, 6)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_LONG(r)
+		Z_PARAM_LONG(g)
+		Z_PARAM_LONG(b)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(a)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 
-	if (gdImageColor(im_src, (int) r, (int) g, (int) b, (int) a) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageColor(im_src, (int) r, (int) g, (int) b, (int) a) == 1);
 }
 
 static void php_image_filter_edgedetect(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageEdgeDetectQuick(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageEdgeDetectQuick(im_src) == 1);
 }
 
 static void php_image_filter_emboss(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageEmboss(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageEmboss(im_src) == 1);
 }
 
 static void php_image_filter_gaussian_blur(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageGaussianBlur(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageGaussianBlur(im_src) == 1);
 }
 
 static void php_image_filter_selective_blur(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageSelectiveBlur(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageSelectiveBlur(im_src) == 1);
 }
 
 static void php_image_filter_mean_removal(INTERNAL_FUNCTION_PARAMETERS)
 {
 	PHP_GD_SINGLE_RES
 
-	if (gdImageMeanRemoval(im_src) == 1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageMeanRemoval(im_src) == 1);
 }
 
 static void php_image_filter_smooth(INTERNAL_FUNCTION_PARAMETERS)
@@ -3430,17 +3599,15 @@ static void php_image_filter_smooth(INTERNAL_FUNCTION_PARAMETERS)
 	gdImagePtr im_src;
 	double weight;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Old", &SIM, gd_image_ce, &tmp, &weight) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_DOUBLE(weight)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 
-	if (gdImageSmooth(im_src, (float)weight)==1) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImageSmooth(im_src, (float)weight) == 1);
 }
 
 static void php_image_filter_pixelate(INTERNAL_FUNCTION_PARAMETERS)
@@ -3448,19 +3615,19 @@ static void php_image_filter_pixelate(INTERNAL_FUNCTION_PARAMETERS)
 	zval *IM;
 	gdImagePtr im;
 	zend_long tmp, blocksize;
-	bool mode = 0;
+	bool mode = false;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oll|b", &IM, gd_image_ce, &tmp, &blocksize, &mode) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(3, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_LONG(blocksize)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_BOOL(mode)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
-	if (gdImagePixelate(im, (int) blocksize, (const unsigned int) mode)) {
-		RETURN_TRUE;
-	}
-
-	RETURN_FALSE;
+	RETURN_BOOL(gdImagePixelate(im, (int) blocksize, (const unsigned int) mode));;
 }
 
 static void php_image_filter_scatter(INTERNAL_FUNCTION_PARAMETERS)
@@ -3471,7 +3638,22 @@ static void php_image_filter_scatter(INTERNAL_FUNCTION_PARAMETERS)
 	zend_long tmp;
 	zend_long scatter_sub, scatter_plus;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Olll|a", &IM, gd_image_ce, &tmp, &scatter_sub, &scatter_plus, &hash_colors) == FAILURE) {
+	ZEND_PARSE_PARAMETERS_START(4, 5)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(tmp)
+		Z_PARAM_LONG(scatter_sub)
+		Z_PARAM_LONG(scatter_plus)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ARRAY(hash_colors)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (scatter_sub < 0 || ZEND_SIZE_T_INT_OVFL(scatter_sub)) {
+		zend_argument_value_error(3, "must be between 0 and %d", INT_MAX);
+		RETURN_THROWS();
+	}
+
+	if (scatter_plus < 0 || ZEND_SIZE_T_INT_OVFL(scatter_plus)) {
+		zend_argument_value_error(4, "must be between 0 and %d", INT_MAX);
 		RETURN_THROWS();
 	}
 
@@ -3487,10 +3669,23 @@ static void php_image_filter_scatter(INTERNAL_FUNCTION_PARAMETERS)
 			RETURN_BOOL(gdImageScatter(im, (int)scatter_sub, (int)scatter_plus));
 		}
 
-		colors = emalloc(num_colors * sizeof(int));
+		colors = safe_emalloc(num_colors, sizeof(int), 0);
 
 		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(hash_colors), color) {
-			*(colors + i++) = (int) zval_get_long(color);
+			bool failed = false;
+			ZVAL_DEREF(color);
+			zend_long tmp = zval_try_get_long(color, &failed);
+			if (failed) {
+				efree(colors);
+				zend_argument_type_error(5, "must be of type int, %s given", zend_zval_type_name(color));
+				RETURN_THROWS();
+			}
+			if (tmp < 0 || ZEND_LONG_INT_OVFL(tmp)) {
+				efree(colors);
+				zend_argument_value_error(5, "value must be between 0 and %d", INT_MAX);
+				RETURN_THROWS();
+			}
+			colors[i++] = (int) tmp;
 		} ZEND_HASH_FOREACH_END();
 
 		RETVAL_BOOL(gdImageScatterColor(im, (int)scatter_sub, (int)scatter_plus, colors, num_colors));
@@ -3507,7 +3702,7 @@ PHP_FUNCTION(imagefilter)
 	zval *tmp;
 
 	typedef void (*image_filter)(INTERNAL_FUNCTION_PARAMETERS);
-	zend_long filtertype;
+	zend_long filtertype = 0;
 	image_filter filters[] =
 	{
 		php_image_filter_negate ,
@@ -3525,15 +3720,17 @@ PHP_FUNCTION(imagefilter)
 		php_image_filter_scatter
 	};
 
-	if (ZEND_NUM_ARGS() < 2 || ZEND_NUM_ARGS() > IMAGE_FILTER_MAX_ARGS) {
-		WRONG_PARAM_COUNT;
-	} else if (zend_parse_parameters(2, "Ol", &tmp, gd_image_ce, &filtertype) == FAILURE) {
+	/* We need to do some initial ZPP parsing to be able to extract the filter value */
+	if (zend_parse_parameters(MIN(2, ZEND_NUM_ARGS()), "Ol*", &tmp, gd_image_ce, &filtertype) == FAILURE) {
+
 		RETURN_THROWS();
 	}
 
-	if (filtertype >= 0 && filtertype <= IMAGE_FILTER_MAX) {
-		filters[filtertype](INTERNAL_FUNCTION_PARAM_PASSTHRU);
+	if (UNEXPECTED(filtertype < 0 || filtertype > IMAGE_FILTER_MAX)) {
+		zend_argument_value_error(2, "must be one of the IMG_FILTER_* filter constants");
+		RETURN_THROWS();
 	}
+	filters[filtertype](INTERNAL_FUNCTION_PARAM_PASSTHRU);
 }
 /* }}} */
 
@@ -3544,29 +3741,30 @@ PHP_FUNCTION(imageconvolution)
 	zval *var = NULL, *var2 = NULL;
 	gdImagePtr im_src = NULL;
 	double div, offset;
-	int nelem, i, j, res;
 	float matrix[3][3] = {{0,0,0}, {0,0,0}, {0,0,0}};
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oadd", &SIM, gd_image_ce, &hash_matrix, &div, &offset) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJECT_OF_CLASS(SIM, gd_image_ce)
+		Z_PARAM_ARRAY(hash_matrix)
+		Z_PARAM_DOUBLE(div)
+		Z_PARAM_DOUBLE(offset)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im_src = php_gd_libgdimageptr_from_zval_p(SIM);
 
-	nelem = zend_hash_num_elements(Z_ARRVAL_P(hash_matrix));
-	if (nelem != 3) {
+	if (zend_hash_num_elements(Z_ARRVAL_P(hash_matrix)) != 3) {
 		zend_argument_value_error(2, "must be a 3x3 array");
 		RETURN_THROWS();
 	}
 
-	for (i=0; i<3; i++) {
-		if ((var = zend_hash_index_find(Z_ARRVAL_P(hash_matrix), (i))) != NULL && Z_TYPE_P(var) == IS_ARRAY) {
+	for (uint8_t i = 0; i < 3; i++) {
+		if ((var = zend_hash_index_find_deref(Z_ARRVAL_P(hash_matrix), (i))) != NULL && Z_TYPE_P(var) == IS_ARRAY) {
 			if (zend_hash_num_elements(Z_ARRVAL_P(var)) != 3 ) {
 				zend_argument_value_error(2, "must be a 3x3 array, matrix[%d] only has %d elements", i, zend_hash_num_elements(Z_ARRVAL_P(var)));
 				RETURN_THROWS();
 			}
 
-			for (j=0; j<3; j++) {
+			for (uint8_t j = 0; j < 3; j++) {
 				if ((var2 = zend_hash_index_find(Z_ARRVAL_P(var), j)) != NULL) {
 					matrix[i][j] = (float) zval_get_double(var2);
 				} else {
@@ -3576,13 +3774,24 @@ PHP_FUNCTION(imageconvolution)
 			}
 		}
 	}
-	res = gdImageConvolution(im_src, matrix, (float)div, (float)offset);
 
-	if (res) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
+	if (UNEXPECTED(!zend_finite(div))) {
+		zend_argument_value_error(3, "must be finite");
+		RETURN_THROWS();
 	}
+
+	float div_float = (float) div;
+	if (UNEXPECTED(div_float == 0.0f)) {
+		zend_argument_value_error(3, "must not be 0");
+		RETURN_THROWS();
+	}
+
+	if (UNEXPECTED(!zend_finite(offset))) {
+		zend_argument_value_error(4, "must be finite");
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(gdImageConvolution(im_src, matrix, div_float, (float) offset));
 }
 /* }}} */
 /* End section: Filters */
@@ -3594,9 +3803,10 @@ PHP_FUNCTION(imageflip)
 	zend_long mode;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol", &IM, gd_image_ce, &mode) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(mode)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -3629,9 +3839,10 @@ PHP_FUNCTION(imageantialias)
 	bool alias;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ob", &IM, gd_image_ce, &alias) == FAILURE) {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_BOOL(alias)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 	if (im->trueColor) {
@@ -3641,6 +3852,23 @@ PHP_FUNCTION(imageantialias)
 	RETURN_TRUE;
 }
 /* }}} */
+
+static bool php_gd_zval_try_get_c_int(zval *tmp, const char *field, int *res) {
+	zend_long r;
+	bool failed = false;
+	ZVAL_DEREF(tmp);
+	r = zval_try_get_long(tmp, &failed);
+	if (failed) {
+		zend_argument_type_error(2, "\"%s\" key must be of type int, %s given", field, zend_zval_type_name(tmp));
+		return false;
+	}
+	if (UNEXPECTED(ZEND_LONG_EXCEEDS_INT(r))) {
+		zend_argument_value_error(2, "\"%s\" key must be between %d and %d", field, INT_MIN, INT_MAX);
+		return false;
+	}
+	*res = (int)r;
+	return true;
+}
 
 /* {{{ Crop an image using the given coordinates and size, x, y, width and height. */
 PHP_FUNCTION(imagecrop)
@@ -3652,37 +3880,66 @@ PHP_FUNCTION(imagecrop)
 	zval *z_rect;
 	zval *tmp;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oa", &IM, gd_image_ce, &z_rect) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_ARRAY(z_rect)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	if ((tmp = zend_hash_str_find(Z_ARRVAL_P(z_rect), "x", sizeof("x") -1)) != NULL) {
-		rect.x = zval_get_long(tmp);
+		if (!php_gd_zval_try_get_c_int(tmp, "x", &rect.x)) {
+			RETURN_THROWS();
+		}
 	} else {
 		zend_argument_value_error(2, "must have an \"x\" key");
 		RETURN_THROWS();
 	}
 
 	if ((tmp = zend_hash_str_find(Z_ARRVAL_P(z_rect), "y", sizeof("y") - 1)) != NULL) {
-		rect.y = zval_get_long(tmp);
+		if (!php_gd_zval_try_get_c_int(tmp, "y", &rect.y)) {
+			RETURN_THROWS();
+		}
 	} else {
 		zend_argument_value_error(2, "must have a \"y\" key");
 		RETURN_THROWS();
 	}
 
 	if ((tmp = zend_hash_str_find(Z_ARRVAL_P(z_rect), "width", sizeof("width") - 1)) != NULL) {
-		rect.width = zval_get_long(tmp);
+		if (!php_gd_zval_try_get_c_int(tmp, "width", &rect.width)) {
+			RETURN_THROWS();
+		}
 	} else {
 		zend_argument_value_error(2, "must have a \"width\" key");
 		RETURN_THROWS();
 	}
 
 	if ((tmp = zend_hash_str_find(Z_ARRVAL_P(z_rect), "height", sizeof("height") - 1)) != NULL) {
-		rect.height = zval_get_long(tmp);
+		if (!php_gd_zval_try_get_c_int(tmp, "height", &rect.height)) {
+			RETURN_THROWS();
+		}
 	} else {
 		zend_argument_value_error(2, "must have a \"height\" key");
+		RETURN_THROWS();
+	}
+
+	if ((rect.width > 0 && rect.x > INT_MAX - rect.width)) {
+		zend_argument_value_error(2, "overflow with \"x\" and \"width\" keys");
+		RETURN_THROWS();
+	}
+
+	if ((rect.width < 0 && rect.x < INT_MIN - rect.width)) {
+		zend_argument_value_error(2, "underflow with \"x\" and \"width\" keys");
+		RETURN_THROWS();
+	}
+
+	if ((rect.height > 0 && rect.y > INT_MAX - rect.height)) {
+		zend_argument_value_error(2, "overflow with \"y\" and \"height\" keys");
+		RETURN_THROWS();
+	}
+
+	if ((rect.height < 0 && rect.y < INT_MIN - rect.height)) {
+		zend_argument_value_error(2, "underflow with \"y\" and \"height\" keys");
 		RETURN_THROWS();
 	}
 
@@ -3706,9 +3963,13 @@ PHP_FUNCTION(imagecropauto)
 	gdImagePtr im;
 	gdImagePtr im_crop;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|ldl", &IM, gd_image_ce, &mode, &threshold, &color) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(mode)
+		Z_PARAM_DOUBLE(threshold)
+		Z_PARAM_LONG(color)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -3752,12 +4013,27 @@ PHP_FUNCTION(imagescale)
 	zend_long tmp_w, tmp_h=-1, tmp_m = GD_BILINEAR_FIXED;
 	gdInterpolationMethod method, old_method;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Ol|ll", &IM, gd_image_ce, &tmp_w, &tmp_h, &tmp_m) == FAILURE)  {
+	ZEND_PARSE_PARAMETERS_START(2, 4)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_LONG(tmp_w)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(tmp_h)
+		Z_PARAM_LONG(tmp_m)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (tmp_m < GD_DEFAULT || tmp_m >= GD_METHOD_COUNT) {
+		zend_argument_value_error(4, "must be one of the GD_* constants");
 		RETURN_THROWS();
 	}
+
 	method = tmp_m;
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
+
+	if (tmp_h < 0 && tmp_w < 0) {
+		zend_value_error("Argument #2 ($width) and argument #3 ($height) cannot be both negative");
+		RETURN_THROWS();
+	}
 
 	if (tmp_h < 0 || tmp_w < 0) {
 		/* preserve ratio */
@@ -3767,16 +4043,31 @@ PHP_FUNCTION(imagescale)
 		src_y = gdImageSY(im);
 
 		if (src_x && tmp_h < 0) {
+			if (tmp_w > (ZEND_LONG_MAX / src_y)) {
+				zend_argument_value_error(2, "must be less than or equal to " ZEND_LONG_FMT, (zend_long)(ZEND_LONG_MAX / src_y));
+				RETURN_THROWS();
+			}
 			tmp_h = tmp_w * src_y / src_x;
 		}
 		if (src_y && tmp_w < 0) {
+			if (tmp_h > (ZEND_LONG_MAX / src_x)) {
+				zend_argument_value_error(3, "must be less than or equal to " ZEND_LONG_FMT, (zend_long)(ZEND_LONG_MAX / src_x));
+				RETURN_THROWS();
+			}
 			tmp_w = tmp_h * src_x / src_y;
 		}
 	}
 
-	if (tmp_h <= 0 || tmp_h > INT_MAX || tmp_w <= 0 || tmp_w > INT_MAX) {
-		RETURN_FALSE;
+	if (tmp_w <= 0 || ZEND_SIZE_T_INT_OVFL(tmp_w)) {
+		zend_argument_value_error(2, "must be between 1 and %d", INT_MAX);
+		RETURN_THROWS();
 	}
+
+	if (tmp_h <= 0 || ZEND_SIZE_T_INT_OVFL(tmp_h)) {
+		zend_argument_value_error(3, "must be between 1 and %d", INT_MAX);
+		RETURN_THROWS();
+	}
+
 
 	new_width = tmp_w;
 	new_height = tmp_h;
@@ -3806,33 +4097,35 @@ PHP_FUNCTION(imageaffine)
 	gdRectPtr pRect = NULL;
 	zval *z_rect = NULL;
 	zval *z_affine;
-	zval *tmp;
 	double affine[6];
-	int i, nelems;
-	zval *zval_affine_elem = NULL;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "Oa|a!", &IM, gd_image_ce, &z_affine, &z_rect) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_ARRAY(z_affine)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ARRAY_OR_NULL(z_rect)
+	ZEND_PARSE_PARAMETERS_END();
+
 
 	src = php_gd_libgdimageptr_from_zval_p(IM);
-
-	if ((nelems = zend_hash_num_elements(Z_ARRVAL_P(z_affine))) != 6) {
+	uint32_t nelems = zend_hash_num_elements(Z_ARRVAL_P(z_affine));
+	if (nelems != 6) {
 		zend_argument_value_error(2, "must have 6 elements");
 		RETURN_THROWS();
 	}
 
-	for (i = 0; i < nelems; i++) {
-		if ((zval_affine_elem = zend_hash_index_find(Z_ARRVAL_P(z_affine), i)) != NULL) {
+	for (uint32_t i = 0; i < nelems; i++) {
+		zval *zval_affine_elem = zend_hash_index_find_deref(Z_ARRVAL_P(z_affine), i);
+		if (zval_affine_elem != NULL) {
 			switch (Z_TYPE_P(zval_affine_elem)) {
 				case IS_LONG:
-					affine[i]  = Z_LVAL_P(zval_affine_elem);
-					break;
 				case IS_DOUBLE:
-					affine[i] = Z_DVAL_P(zval_affine_elem);
-					break;
 				case IS_STRING:
 					affine[i] = zval_get_double(zval_affine_elem);
+					if (affine[i] < INT_MIN || affine[i] > INT_MAX) {
+						zend_argument_value_error(2, "element %i must be between %d and %d", i, INT_MIN, INT_MAX);
+						RETURN_THROWS();
+					}
 					break;
 				default:
 					zend_argument_type_error(3, "contains invalid type for element %i", i);
@@ -3842,6 +4135,7 @@ PHP_FUNCTION(imageaffine)
 	}
 
 	if (z_rect != NULL) {
+		zval *tmp;
 		if ((tmp = zend_hash_str_find(Z_ARRVAL_P(z_rect), "x", sizeof("x") - 1)) != NULL) {
 			rect.x = zval_get_long(tmp);
 		} else {
@@ -3884,36 +4178,51 @@ PHP_FUNCTION(imageaffine)
 }
 /* }}} */
 
+#define PHP_GD_Z_PARAM_ARRAY_HT_OR_DOUBLE(dest_ht, dest_double) \
+	Z_PARAM_PROLOGUE(0, 0); \
+	if (EXPECTED(Z_TYPE_P(_arg) == IS_ARRAY)) { \
+		dest_ht = Z_ARRVAL_P(_arg); \
+	} else { \
+		dest_ht = NULL; \
+		if (UNEXPECTED(!zend_parse_arg_double(_arg, &dest_double, NULL, false, _i))) { \
+			zend_argument_type_error(_i, "must be of type array|float, %s given", zend_zval_value_name(_arg)); \
+			_error_code = ZPP_ERROR_FAILURE; \
+			break; \
+		} \
+	}
+
 /* {{{ Return an image containing the affine tramsformed src image, using an optional clipping area */
 PHP_FUNCTION(imageaffinematrixget)
 {
 	double affine[6];
+	double dval_option = 0.0;
 	zend_long type;
-	zval *options = NULL;
+	HashTable *options;
 	zval *tmp;
-	int res = GD_FALSE, i;
+	int res = GD_FALSE;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "lz", &type, &options) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(type)
+		PHP_GD_Z_PARAM_ARRAY_HT_OR_DOUBLE(options, dval_option)
+	ZEND_PARSE_PARAMETERS_END();
 
 	switch((gdAffineStandardMatrix)type) {
 		case GD_AFFINE_TRANSLATE:
 		case GD_AFFINE_SCALE: {
 			double x, y;
-			if (Z_TYPE_P(options) != IS_ARRAY) {
-				zend_argument_type_error(1, "must be of type array when using translate or scale");
+			if (options == NULL) {
+				zend_argument_type_error(2, "must be of type array when using translate or scale");
 				RETURN_THROWS();
 			}
 
-			if ((tmp = zend_hash_str_find(Z_ARRVAL_P(options), "x", sizeof("x") - 1)) != NULL) {
+			if ((tmp = zend_hash_str_find(options, "x", sizeof("x") - 1)) != NULL) {
 				x = zval_get_double(tmp);
 			} else {
 				zend_argument_value_error(2, "must have an \"x\" key");
 				RETURN_THROWS();
 			}
 
-			if ((tmp = zend_hash_str_find(Z_ARRVAL_P(options), "y", sizeof("y") - 1)) != NULL) {
+			if ((tmp = zend_hash_str_find(options, "y", sizeof("y") - 1)) != NULL) {
 				y = zval_get_double(tmp);
 			} else {
 				zend_argument_value_error(2, "must have a \"y\" key");
@@ -3933,7 +4242,11 @@ PHP_FUNCTION(imageaffinematrixget)
 		case GD_AFFINE_SHEAR_VERTICAL: {
 			double angle;
 
-			angle = zval_get_double(options);
+			if (options != NULL) {
+				zend_argument_type_error(2, "must be of type float when using rotate or shear");
+				RETURN_THROWS();
+			}
+			angle = dval_option;
 
 			if (type == GD_AFFINE_SHEAR_HORIZONTAL) {
 				res = gdAffineShearHorizontal(affine, angle);
@@ -3953,8 +4266,9 @@ PHP_FUNCTION(imageaffinematrixget)
 	if (res == GD_FALSE) {
 		RETURN_FALSE;
 	} else {
-		array_init(return_value);
-		for (i = 0; i < 6; i++) {
+		array_init_size(return_value, 6);
+		zend_hash_real_init_packed(Z_ARRVAL_P(return_value));
+		for (uint8_t i = 0; i < 6; i++) {
 			add_index_double(return_value, i, affine[i]);
 		}
 	}
@@ -3972,9 +4286,10 @@ PHP_FUNCTION(imageaffinematrixconcat)
 	zval *z_m2;
 	int i;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "aa", &z_m1, &z_m2) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(z_m1)
+		Z_PARAM_ARRAY(z_m2)
+	ZEND_PARSE_PARAMETERS_END();
 
 	if (zend_hash_num_elements(Z_ARRVAL_P(z_m1)) != 6) {
 		zend_argument_value_error(1, "must have 6 elements");
@@ -3982,19 +4297,15 @@ PHP_FUNCTION(imageaffinematrixconcat)
 	}
 
 	if (zend_hash_num_elements(Z_ARRVAL_P(z_m2)) != 6) {
-		zend_argument_value_error(1, "must have 6 elements");
+		zend_argument_value_error(2, "must have 6 elements");
 		RETURN_THROWS();
 	}
 
 	for (i = 0; i < 6; i++) {
-		if ((tmp = zend_hash_index_find(Z_ARRVAL_P(z_m1), i)) != NULL) {
+		if ((tmp = zend_hash_index_find_deref(Z_ARRVAL_P(z_m1), i)) != NULL) {
 			switch (Z_TYPE_P(tmp)) {
 				case IS_LONG:
-					m1[i]  = Z_LVAL_P(tmp);
-					break;
 				case IS_DOUBLE:
-					m1[i] = Z_DVAL_P(tmp);
-					break;
 				case IS_STRING:
 					m1[i] = zval_get_double(tmp);
 					break;
@@ -4004,14 +4315,10 @@ PHP_FUNCTION(imageaffinematrixconcat)
 			}
 		}
 
-		if ((tmp = zend_hash_index_find(Z_ARRVAL_P(z_m2), i)) != NULL) {
+		if ((tmp = zend_hash_index_find_deref(Z_ARRVAL_P(z_m2), i)) != NULL) {
 			switch (Z_TYPE_P(tmp)) {
 				case IS_LONG:
-					m2[i]  = Z_LVAL_P(tmp);
-					break;
 				case IS_DOUBLE:
-					m2[i] = Z_DVAL_P(tmp);
-					break;
 				case IS_STRING:
 					m2[i] = zval_get_double(tmp);
 					break;
@@ -4026,7 +4333,8 @@ PHP_FUNCTION(imageaffinematrixconcat)
 		RETURN_FALSE;
 	}
 
-	array_init(return_value);
+	array_init_size(return_value, 6);
+	zend_hash_real_init_packed(Z_ARRVAL_P(return_value));
 	for (i = 0; i < 6; i++) {
 		add_index_double(return_value, i, mr[i]);
 	}
@@ -4038,9 +4346,10 @@ PHP_FUNCTION(imagegetinterpolation)
 	zval *IM;
 	gdImagePtr im;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O", &IM, gd_image_ce) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+	ZEND_PARSE_PARAMETERS_END();
+
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 #ifdef HAVE_GD_GET_INTERPOLATION
@@ -4058,9 +4367,11 @@ PHP_FUNCTION(imagesetinterpolation)
 	gdImagePtr im;
 	zend_long method = GD_BILINEAR_FIXED;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|l", &IM, gd_image_ce, &method) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(method)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
@@ -4077,28 +4388,48 @@ PHP_FUNCTION(imageresolution)
 	zval *IM;
 	gdImagePtr im;
 	zend_long res_x, res_y;
-	bool res_x_is_null = 1, res_y_is_null = 1;
+	bool res_x_is_null = true, res_y_is_null = true;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|l!l!", &IM, gd_image_ce, &res_x, &res_x_is_null, &res_y, &res_y_is_null) == FAILURE)  {
-		RETURN_THROWS();
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 3)
+		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG_OR_NULL(res_x, res_x_is_null)
+		Z_PARAM_LONG_OR_NULL(res_y, res_y_is_null)
+	ZEND_PARSE_PARAMETERS_END();
 
 	im = php_gd_libgdimageptr_from_zval_p(IM);
 
 	if (!res_x_is_null && !res_y_is_null) {
+		if (res_x < 0 || ZEND_SIZE_T_UINT_OVFL(res_x)) {
+			zend_argument_value_error(2, "must be between 0 and %u", UINT_MAX);
+			RETURN_THROWS();
+		}
+		if (res_y < 0 || ZEND_SIZE_T_UINT_OVFL(res_y)) {
+			zend_argument_value_error(3, "must be between 0 and %u", UINT_MAX);
+			RETURN_THROWS();
+		}
 		gdImageSetResolution(im, res_x, res_y);
 		RETURN_TRUE;
 	} else if (!res_x_is_null && res_y_is_null) {
+		if (res_x < 0 || ZEND_SIZE_T_UINT_OVFL(res_x)) {
+			zend_argument_value_error(2, "must be between 0 and %u", UINT_MAX);
+			RETURN_THROWS();
+		}
 		gdImageSetResolution(im, res_x, res_x);
 		RETURN_TRUE;
 	} else if (res_x_is_null && !res_y_is_null) {
+		if (res_y < 0 || ZEND_SIZE_T_UINT_OVFL(res_y)) {
+			zend_argument_value_error(3, "must be between 0 and %u", UINT_MAX);
+			RETURN_THROWS();
+		}
 		gdImageSetResolution(im, res_y, res_y);
 		RETURN_TRUE;
 	}
 
-	array_init(return_value);
-	add_next_index_long(return_value, gdImageResolutionX(im));
-	add_next_index_long(return_value, gdImageResolutionY(im));
+	zval imx, imy;
+	ZVAL_LONG(&imx, gdImageResolutionX(im));
+	ZVAL_LONG(&imy, gdImageResolutionY(im));
+	RETURN_ARR(zend_new_pair(&imx, &imy));
 }
 /* }}} */
 
@@ -4107,7 +4438,7 @@ PHP_FUNCTION(imageresolution)
  *
  * Stream Handling
  * Formerly contained within ext/gd/gd_ctx.c and included
- * at the the top of this file
+ * at the top of this file
  *
  ********************************************************/
 
@@ -4125,80 +4456,67 @@ static void _php_image_output_putc(struct gdIOCtx *ctx, int c) /* {{{ */
 
 static int _php_image_output_putbuf(struct gdIOCtx *ctx, const void* buf, int l) /* {{{ */
 {
-	return php_write((void *)buf, l);
+	size_t written = php_write((void *)buf, l);
+	ZEND_ASSERT(written <= INT_MAX); /* since l <= INT_MAX */
+	return (int) written;
 } /* }}} */
 
 static void _php_image_output_ctxfree(struct gdIOCtx *ctx) /* {{{ */
 {
-	if(ctx) {
-		efree(ctx);
+	efree(ctx);
+} /* }}} */
+
+typedef struct {
+	gdIOCtx ctx;
+	size_t buf_len;
+	unsigned char buf[8192];
+} php_gd_stream_ctx;
+
+static void _php_image_stream_flush(php_gd_stream_ctx *stream_ctx) /* {{{ */
+{
+	if (stream_ctx->buf_len) {
+		php_stream_write((php_stream *) stream_ctx->ctx.data, (char *) stream_ctx->buf, stream_ctx->buf_len);
+		stream_ctx->buf_len = 0;
 	}
 } /* }}} */
 
 static void _php_image_stream_putc(struct gdIOCtx *ctx, int c) /* {{{ */ {
-	char ch = (char) c;
-	php_stream * stream = (php_stream *)ctx->data;
-	php_stream_write(stream, &ch, 1);
+	php_gd_stream_ctx *stream_ctx = (php_gd_stream_ctx *) ctx;
+	if (stream_ctx->buf_len == sizeof(stream_ctx->buf)) {
+		_php_image_stream_flush(stream_ctx);
+	}
+	stream_ctx->buf[stream_ctx->buf_len++] = (unsigned char) c;
 } /* }}} */
 
 static int _php_image_stream_putbuf(struct gdIOCtx *ctx, const void* buf, int l) /* {{{ */
 {
 	php_stream * stream = (php_stream *)ctx->data;
+	_php_image_stream_flush((php_gd_stream_ctx *) ctx);
 	return php_stream_write(stream, (void *)buf, l);
 } /* }}} */
 
 static void _php_image_stream_ctxfree(struct gdIOCtx *ctx) /* {{{ */
 {
 	if(ctx->data) {
+		_php_image_stream_flush((php_gd_stream_ctx *) ctx);
 		ctx->data = NULL;
 	}
-	if(ctx) {
-		efree(ctx);
-	}
+	efree(ctx);
 } /* }}} */
 
 static void _php_image_stream_ctxfreeandclose(struct gdIOCtx *ctx) /* {{{ */
 {
-
 	if(ctx->data) {
+		_php_image_stream_flush((php_gd_stream_ctx *) ctx);
 		php_stream_close((php_stream *) ctx->data);
 		ctx->data = NULL;
 	}
-	if(ctx) {
-		efree(ctx);
-	}
+	efree(ctx);
 } /* }}} */
 
-static gdIOCtx *create_stream_context_from_zval(zval *to_zval) {
-	php_stream *stream;
-	int close_stream = 1;
-
-	if (Z_TYPE_P(to_zval) == IS_RESOURCE) {
-		php_stream_from_zval_no_verify(stream, to_zval);
-		if (stream == NULL) {
-			return NULL;
-		}
-		close_stream = 0;
-	} else if (Z_TYPE_P(to_zval) == IS_STRING) {
-		if (CHECK_ZVAL_NULL_PATH(to_zval)) {
-			zend_argument_type_error(2, "must not contain null bytes");
-			return NULL;
-		}
-
-		stream = php_stream_open_wrapper(Z_STRVAL_P(to_zval), "wb", REPORT_ERRORS|IGNORE_PATH, NULL);
-		if (stream == NULL) {
-			return NULL;
-		}
-	} else {
-		zend_argument_type_error(2, "must be a file name or a stream resource, %s given", zend_zval_type_name(to_zval));
-		return NULL;
-	}
-
-	return create_stream_context(stream, close_stream);
-}
-
 static gdIOCtx *create_stream_context(php_stream *stream, int close_stream) {
-	gdIOCtx *ctx = ecalloc(1, sizeof(gdIOCtx));
+	php_gd_stream_ctx *stream_ctx = ecalloc(1, sizeof(php_gd_stream_ctx));
+	gdIOCtx *ctx = &stream_ctx->ctx;
 
 	ctx->putC = _php_image_stream_putc;
 	ctx->putBuf = _php_image_stream_putbuf;
@@ -4212,93 +4530,46 @@ static gdIOCtx *create_stream_context(php_stream *stream, int close_stream) {
 	return ctx;
 }
 
-static gdIOCtx *create_output_context() {
-	gdIOCtx *ctx = ecalloc(1, sizeof(gdIOCtx));
-
-	ctx->putC = _php_image_output_putc;
-	ctx->putBuf = _php_image_output_putbuf;
-	ctx->gd_free = _php_image_output_ctxfree;
-
-	return ctx;
-}
-
-static void _php_image_output_ctx(INTERNAL_FUNCTION_PARAMETERS, int image_type, char *tn)
-{
-	zval *imgind;
-	zend_long quality = -1, basefilter = -1, speed = -1;
-	gdImagePtr im;
-	gdIOCtx *ctx = NULL;
-	zval *to_zval = NULL;
-
-	if (image_type == PHP_GDIMG_TYPE_GIF) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!", &imgind, gd_image_ce, &to_zval) == FAILURE) {
-			RETURN_THROWS();
-		}
-	} else if (image_type == PHP_GDIMG_TYPE_PNG) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!ll", &imgind, gd_image_ce, &to_zval, &quality, &basefilter) == FAILURE) {
-			RETURN_THROWS();
-		}
-	} else if (image_type == PHP_GDIMG_TYPE_AVIF) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!ll", &imgind, gd_image_ce, &to_zval, &quality, &speed) == FAILURE) {
-			RETURN_THROWS();
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|z!l", &imgind, gd_image_ce, &to_zval, &quality) == FAILURE) {
-			RETURN_THROWS();
-		}
-	}
-
-	im = php_gd_libgdimageptr_from_zval_p(imgind);
+static gdIOCtx *create_output_context(zval *to_zval, uint32_t arg_num) {
+	gdIOCtx *ctx;
 
 	if (to_zval != NULL) {
-		ctx = create_stream_context_from_zval(to_zval);
-		if (!ctx) {
-			RETURN_FALSE;
+		php_stream *stream;
+		int close_stream = 1;
+
+		ZEND_ASSERT(arg_num > 0);
+
+		if (Z_TYPE_P(to_zval) == IS_RESOURCE) {
+			php_stream_from_zval_no_verify(stream, to_zval);
+			if (stream == NULL) {
+				return NULL;
+			}
+			close_stream = 0;
+		} else if (Z_TYPE_P(to_zval) == IS_STRING) {
+			if (zend_str_has_nul_byte(Z_STR_P(to_zval))) {
+				zend_argument_type_error(arg_num, "must not contain null bytes");
+				return NULL;
+			}
+
+			stream = php_stream_open_wrapper(Z_STRVAL_P(to_zval), "wb", REPORT_ERRORS|IGNORE_PATH, NULL);
+			if (stream == NULL) {
+				return NULL;
+			}
+		} else {
+			zend_argument_type_error(arg_num, "must be a file name or a stream resource, %s given", zend_zval_value_name(to_zval));
+			return NULL;
 		}
+
+		ctx = create_stream_context(stream, close_stream);
 	} else {
-		ctx = create_output_context();
+		ctx = ecalloc(1, sizeof(gdIOCtx));
+
+		ctx->putC = _php_image_output_putc;
+		ctx->putBuf = _php_image_output_putbuf;
+		ctx->gd_free = _php_image_output_ctxfree;
 	}
 
-	switch (image_type) {
-#ifdef HAVE_GD_JPG
-		case PHP_GDIMG_TYPE_JPG:
-			gdImageJpegCtx(im, ctx, (int) quality);
-			break;
-#endif
-#ifdef HAVE_GD_WEBP
-		case PHP_GDIMG_TYPE_WEBP:
-			if (quality == -1) {
-				quality = 80;
-			}
-			gdImageWebpCtx(im, ctx, (int) quality);
-			break;
-#endif
-#ifdef HAVE_GD_AVIF
-		case PHP_GDIMG_TYPE_AVIF:
-			if (speed == -1) {
-				speed = 6;
-			}
-			gdImageAvifCtx(im, ctx, (int) quality, (int) speed);
-			break;
-#endif
-#ifdef HAVE_GD_PNG
-		case PHP_GDIMG_TYPE_PNG:
-#ifdef HAVE_GD_BUNDLED
-			gdImagePngCtxEx(im, ctx, (int) quality, (int) basefilter);
-#else
-			gdImagePngCtxEx(im, ctx, (int) quality);
-#endif
-			break;
-#endif
-		case PHP_GDIMG_TYPE_GIF:
-			gdImageGifCtx(im, ctx);
-			break;
-		 EMPTY_SWITCH_DEFAULT_CASE()
-	}
-
-	ctx->gd_free(ctx);
-
-	RETURN_TRUE;
+	return ctx;
 }
 
 /* }}} */

@@ -1,0 +1,53 @@
+/*
+  +----------------------------------------------------------------------+
+  | Copyright © The PHP Group and Contributors.                          |
+  +----------------------------------------------------------------------+
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
+  +----------------------------------------------------------------------+
+  | Author: Matteo Beccati <mbeccati@php.net>                            |
+  +----------------------------------------------------------------------+
+*/
+
+
+#include "php.h"
+#include "ext/pdo/php_pdo_driver.h"
+#include "ext/pdo/pdo_sql_parser.h"
+
+int pdo_pgsql_scanner(pdo_scanner_t *s)
+{
+	const char *cursor = s->cur;
+
+	s->tok = cursor;
+	/*!re2c
+	BINDCHR		= [:][a-zA-Z0-9_]+;
+	QUESTION	= [?];
+	ESCQUESTION	= [?][?];
+	COMMENTS	= ("/*"([^*]+|[*]+[^/*])*[*]*"*/"|"--".*);
+	DOLQ_START	= [A-Za-z\200-\377_];
+	DOLQ_CONT	= [A-Za-z\200-\377_0-9];
+	SPECIALS	= [$eE:?"'/-];
+	MULTICHAR	= [:]{2,};
+	ANYNOEOF	= [\001-\377];
+	TEXTCHR		= ANYNOEOF\SPECIALS;
+	*/
+
+	/*!re2c
+		[eE](['](([']['])|([\\]ANYNOEOF)|ANYNOEOF\['\\])*[']) { RET(PDO_PARSER_TEXT); }
+		(["]((["]["])|ANYNOEOF\["])*["])		{ RET(PDO_PARSER_TEXT); }
+		(['](([']['])|ANYNOEOF\['])*['])		{ RET(PDO_PARSER_TEXT); }
+		[$](DOLQ_START DOLQ_CONT*)?[$]			{ RET(PDO_PARSER_CUSTOM_QUOTE); }
+		MULTICHAR								{ RET(PDO_PARSER_TEXT); }
+		ESCQUESTION								{ RET(PDO_PARSER_ESCAPED_QUESTION); }
+		BINDCHR									{ RET(PDO_PARSER_BIND); }
+		QUESTION								{ RET(PDO_PARSER_BIND_POS); }
+		SPECIALS								{ SKIP_ONE(PDO_PARSER_TEXT); }
+		COMMENTS								{ RET(PDO_PARSER_TEXT); }
+		/* Plain text may contain e/E, as long as it doesn't end with one, which could start an E'...' string */
+		([eE]* TEXTCHR)+						{ RET(PDO_PARSER_TEXT); }
+		*										{ SKIP_ONE(PDO_PARSER_TEXT); }
+	*/
+}

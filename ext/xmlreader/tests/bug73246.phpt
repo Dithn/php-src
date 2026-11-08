@@ -5,10 +5,23 @@ xmlreader
 --FILE--
 <?php
 $reader = new XMLReader();
-$reader->open(__FILE__, "UTF\0-8");
-$reader->XML('<?xml version="1.0"?><root/>', "UTF\0-8");
+try {
+    $reader->open(__FILE__, "UTF\0-8");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+try {
+    $reader->XML('<?xml version="1.0"?><root/>', "UTF\0-8");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
+try {
+    XMLReader::fromStream(fopen('php://memory', 'r'), encoding: "UTF\0-8");
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
+}
 ?>
---EXPECTF--
-Warning: XMLReader::open(): Encoding must not contain NUL bytes in %s on line %d
-
-Warning: XMLReader::XML(): Encoding must not contain NUL bytes in %s on line %d
+--EXPECT--
+ValueError: XMLReader::open(): Argument #2 ($encoding) must not contain any null bytes
+ValueError: XMLReader::XML(): Argument #2 ($encoding) must not contain any null bytes
+ValueError: XMLReader::fromStream(): Argument #2 ($encoding) must not contain any null bytes

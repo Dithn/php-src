@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Dmitry Stogov <dmitry@php.net>                              |
    +----------------------------------------------------------------------+
@@ -30,8 +28,6 @@
 #ifdef _WIN32
 
 #include <windows.h>
-
-typedef unsigned int in_addr_t;
 
 struct sockaddr_un {
 	short   sun_family;
@@ -71,15 +67,6 @@ static int is_impersonate = 0;
 # include <arpa/inet.h>
 # include <netdb.h>
 # include <signal.h>
-
-# if defined(HAVE_POLL_H) && defined(HAVE_POLL)
-#  include <poll.h>
-# elif defined(HAVE_SYS_POLL_H) && defined(HAVE_POLL)
-#  include <sys/poll.h>
-# endif
-# if defined(HAVE_SYS_SELECT_H)
-#  include <sys/select.h>
-# endif
 
 #ifndef INADDR_NONE
 #define INADDR_NONE ((unsigned long) -1)
@@ -643,7 +630,7 @@ static int is_port_number(const char *bindpath)
 
 int fcgi_listen(const char *path, int backlog)
 {
-	char     *s;
+	const char *s;
 	int       tcp = 0;
 	char      host[MAXPATHLEN];
 	short     port = 0;
@@ -683,12 +670,7 @@ int fcgi_listen(const char *path, int backlog)
 		if (!*host || !strncmp(host, "*", sizeof("*")-1)) {
 			sa.sa_inet.sin_addr.s_addr = htonl(INADDR_ANY);
 		} else {
-#ifdef HAVE_INET_PTON
 			if (!inet_pton(AF_INET, host, &sa.sa_inet.sin_addr)) {
-#else
-			sa.sa_inet.sin_addr.s_addr = inet_addr(host);
-			if (sa.sa_inet.sin_addr.s_addr == INADDR_NONE) {
-#endif
 				struct hostent *hep;
 
 				if(strlen(host) > MAXFQDNLEN) {
@@ -744,8 +726,8 @@ int fcgi_listen(const char *path, int backlog)
 		memset(&sa.sa_unix, 0, sizeof(sa.sa_unix));
 		sa.sa_unix.sun_family = AF_UNIX;
 		memcpy(sa.sa_unix.sun_path, path, path_len + 1);
-		sock_len = (size_t)(((struct sockaddr_un *)0)->sun_path)	+ path_len;
-#ifdef HAVE_SOCKADDR_UN_SUN_LEN
+		sock_len = offsetof(struct sockaddr_un, sun_path) + path_len;
+#ifdef HAVE_STRUCT_SOCKADDR_UN_SUN_LEN
 		sa.sa_unix.sun_len = sock_len;
 #endif
 		unlink(path);
@@ -951,7 +933,7 @@ static inline ssize_t safe_write(fcgi_request *req, const void *buf, size_t coun
 	return n;
 }
 
-static inline ssize_t safe_read(fcgi_request *req, const void *buf, size_t count)
+static inline ssize_t safe_read(fcgi_request *req, void *buf, size_t count)
 {
 	int    ret;
 	size_t n = 0;
@@ -965,9 +947,9 @@ static inline ssize_t safe_read(fcgi_request *req, const void *buf, size_t count
 		tmp = count - n;
 
 		if (!req->tcp) {
-			unsigned int in_len = tmp > UINT_MAX ? UINT_MAX : (unsigned int)tmp;
+			unsigned int in_len = tmp > INT_MAX ? INT_MAX : (unsigned int)tmp;
 
-			ret = read(req->fd, ((char*)buf)+n, in_len);
+			ret = _read(req->fd, ((char*)buf)+n, in_len);
 		} else {
 			int in_len = tmp > INT_MAX ? INT_MAX : (int)tmp;
 
@@ -1190,10 +1172,8 @@ static int fcgi_read_request(fcgi_request *req)
 				*p++ = (zlen >> 8) & 0xff;
 				*p++ = zlen & 0xff;
 			}
-			memcpy(p, q->var, q->var_len);
-			p += q->var_len;
-			memcpy(p, Z_STRVAL_P(value), zlen);
-			p += zlen;
+			p = zend_mempcpy(p, q->var, q->var_len);
+			p = zend_mempcpy(p, Z_STRVAL_P(value), zlen);
 			q = q->list_next;
 		}
 		len = (int)(p - buf - sizeof(fcgi_header));
@@ -1202,7 +1182,7 @@ static int fcgi_read_request(fcgi_request *req)
 			req->keep = 0;
 			return 0;
 		}
-		return 0;
+		return 2;
 	} else {
 		return 0;
 	}
@@ -1299,7 +1279,7 @@ void fcgi_close(fcgi_request *req, int force, int destroy)
 		if (!force) {
 			char buf[8];
 
-			shutdown(req->fd, 1);
+			shutdown(req->fd, SHUT_WR);
 			/* read any remaining data, it may be omitted */
 			while (recv(req->fd, buf, sizeof(buf), 0) > 0) {}
 		}
@@ -1340,7 +1320,7 @@ static int fcgi_is_allowed(void) {
 	if (client_sa.sa.sa_family == AF_INET6) {
 		for (i = 0; allowed_clients[i].sa.sa_family ; i++) {
 			if (allowed_clients[i].sa.sa_family == AF_INET6
-				&& !memcmp(&client_sa.sa_inet6.sin6_addr, &allowed_clients[i].sa_inet6.sin6_addr, 12)) {
+				&& !memcmp(&client_sa.sa_inet6.sin6_addr, &allowed_clients[i].sa_inet6.sin6_addr, sizeof(client_sa.sa_inet6.sin6_addr))) {
 				return 1;
 			}
 #ifdef IN6_IS_ADDR_V4MAPPED
@@ -1423,46 +1403,30 @@ int fcgi_accept_request(fcgi_request *req)
 					return -1;
 				}
 
+#if defined(F_SETFD) && defined(FD_CLOEXEC)
+				int fd_attrs = fcntl(req->fd, F_GETFD);
+				if (0 > fd_attrs) {
+					fcgi_log(FCGI_WARNING, "failed to get attributes of the connection socket");
+				}
+				if (0 > fcntl(req->fd, F_SETFD, fd_attrs | FD_CLOEXEC)) {
+					fcgi_log(FCGI_WARNING, "failed to change attribute of the connection socket");
+				}
+#endif
+
 #ifdef _WIN32
 				break;
 #else
 				if (req->fd >= 0) {
-#if defined(HAVE_POLL)
-					struct pollfd fds;
 					int ret;
 
-					fds.fd = req->fd;
-					fds.events = POLLIN;
-					fds.revents = 0;
 					do {
 						errno = 0;
-						ret = poll(&fds, 1, 5000);
+						ret = php_pollfd_for_ms(req->fd, POLLIN, 5000);
 					} while (ret < 0 && errno == EINTR);
-					if (ret > 0 && (fds.revents & POLLIN)) {
+					if (ret & POLLIN) {
 						break;
 					}
 					fcgi_close(req, 1, 0);
-#else
-					if (req->fd < FD_SETSIZE) {
-						struct timeval tv = {5,0};
-						fd_set set;
-						int ret;
-
-						FD_ZERO(&set);
-						FD_SET(req->fd, &set);
-						do {
-							errno = 0;
-							ret = select(req->fd + 1, &set, NULL, NULL, &tv) >= 0;
-						} while (ret < 0 && errno == EINTR);
-						if (ret > 0 && FD_ISSET(req->fd, &set)) {
-							break;
-						}
-						fcgi_close(req, 1, 0);
-					} else {
-						fcgi_log(FCGI_ERROR, "Too many open file descriptors. FD_SETSIZE limit exceeded.");
-						fcgi_close(req, 1, 0);
-					}
-#endif
 				}
 #endif
 			}
@@ -1470,7 +1434,8 @@ int fcgi_accept_request(fcgi_request *req)
 			return -1;
 		}
 		req->hook.on_read();
-		if (fcgi_read_request(req)) {
+		int read_result = fcgi_read_request(req);
+		if (read_result == 1) {
 #ifdef _WIN32
 			if (is_impersonate && !req->tcp) {
 				pipe = (HANDLE)_get_osfhandle(req->fd);
@@ -1481,7 +1446,7 @@ int fcgi_accept_request(fcgi_request *req)
 			}
 #endif
 			return req->fd;
-		} else {
+		} else if (read_result == 0) {
 			fcgi_close(req, 1, 1);
 		}
 	}
@@ -1587,23 +1552,20 @@ int fcgi_write(fcgi_request *req, fcgi_request_type type, const char *str, int l
 		if (!req->out_hdr) {
 			open_packet(req, type);
 		}
-		memcpy(req->out_pos, str, len);
-		req->out_pos += len;
+		req->out_pos = zend_mempcpy(req->out_pos, str, len);
 	} else if (len - limit < (int)(sizeof(req->out_buf) - sizeof(fcgi_header))) {
-		if (!req->out_hdr) {
-			open_packet(req, type);
-		}
 		if (limit > 0) {
-			memcpy(req->out_pos, str, limit);
-			req->out_pos += limit;
+			if (!req->out_hdr) {
+				open_packet(req, type);
+			}
+			req->out_pos = zend_mempcpy(req->out_pos, str, limit);
 		}
 		if (!fcgi_flush(req, 0)) {
 			return -1;
 		}
 		if (len > limit) {
 			open_packet(req, type);
-			memcpy(req->out_pos, str + limit, len - limit);
-			req->out_pos += len - limit;
+			req->out_pos = zend_mempcpy(req->out_pos, str + limit, len - limit);
 		}
 	} else {
 		int pos = 0;
@@ -1639,8 +1601,7 @@ int fcgi_write(fcgi_request *req, fcgi_request_type type, const char *str, int l
 		}
 		if (pad) {
 			open_packet(req, type);
-			memcpy(req->out_pos, str + len - rest,  rest);
-			req->out_pos += rest;
+			req->out_pos = zend_mempcpy(req->out_pos, str + len - rest, rest);
 		}
 	}
 #endif
@@ -1742,7 +1703,7 @@ void fcgi_free_mgmt_var_cb(zval *zv)
 	pefree(Z_STR_P(zv), 1);
 }
 
-const char *fcgi_get_last_client_ip()
+const char *fcgi_get_last_client_ip(void)
 {
 	static char str[INET6_ADDRSTRLEN];
 

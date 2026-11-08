@@ -18,10 +18,11 @@ echo "\n-- Testing ftp_ssl_connect() function timeout exception for value 0 --\n
 try {
     ftp_ssl_connect('totes.invalid', 21, 0);
 } catch (ValueError $exception) {
-    echo $exception->getMessage() . "\n";
+    echo $exception::class, ': ', $exception->getMessage(), "\n";
 }
 
 echo "===DONE===\n";
+?>
 --EXPECTF--
 *** Testing ftp_ssl_connect() function : error conditions ***
 
@@ -31,5 +32,5 @@ Warning: ftp_ssl_connect(): php_network_getaddresses: getaddrinfo for %s failed:
 bool(false)
 
 -- Testing ftp_ssl_connect() function timeout exception for value 0 --
-ftp_ssl_connect(): Argument #3 ($timeout) must be greater than 0
+ValueError: ftp_ssl_connect(): Argument #3 ($timeout) must be greater than 0
 ===DONE===

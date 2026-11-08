@@ -2,15 +2,13 @@
    +----------------------------------------------------------------------+
    | Zend OPcache JIT                                                     |
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Dmitry Stogov <dmitry@php.net>                              |
    +----------------------------------------------------------------------+
@@ -18,6 +16,13 @@
 
 #ifndef _ZEND_BITSET_H_
 #define _ZEND_BITSET_H_
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+
+#include "zend_portability.h"
+#include "zend_long.h"
 
 typedef zend_ulong *zend_bitset;
 
@@ -38,7 +43,7 @@ typedef zend_ulong *zend_bitset;
 	(zend_bitset)do_alloca((n) * ZEND_BITSET_ELM_SIZE, use_heap)
 
 /* Number of trailing zero bits (0x01 -> 0; 0x40 -> 6; 0x00 -> LEN) */
-static zend_always_inline int zend_ulong_ntz(zend_ulong num)
+ZEND_ATTRIBUTE_CONST static zend_always_inline int zend_ulong_ntz(zend_ulong num)
 {
 #if (defined(__GNUC__) || __has_builtin(__builtin_ctzl)) \
 	&& SIZEOF_ZEND_LONG == SIZEOF_LONG && defined(PHP_HAVE_BUILTIN_CTZL)
@@ -53,7 +58,6 @@ static zend_always_inline int zend_ulong_ntz(zend_ulong num)
 #else
 	if (!BitScanForward(&index, num)) {
 #endif
-		/* undefined behavior */
 		return SIZEOF_ZEND_LONG * 8;
 	}
 
@@ -76,7 +80,7 @@ static zend_always_inline int zend_ulong_ntz(zend_ulong num)
 }
 
 /* Number of leading zero bits (Undefined for zero) */
-static zend_always_inline int zend_ulong_nlz(zend_ulong num)
+ZEND_ATTRIBUTE_CONST static zend_always_inline int zend_ulong_nlz(zend_ulong num)
 {
 #if (defined(__GNUC__) || __has_builtin(__builtin_clzl)) \
 	&& SIZEOF_ZEND_LONG == SIZEOF_LONG && defined(PHP_HAVE_BUILTIN_CLZL)
@@ -91,7 +95,6 @@ static zend_always_inline int zend_ulong_nlz(zend_ulong num)
 #else
 	if (!BitScanReverse(&index, num)) {
 #endif
-		/* undefined behavior */
 		return SIZEOF_ZEND_LONG * 8;
 	}
 

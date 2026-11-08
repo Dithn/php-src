@@ -2,10 +2,14 @@
 Test session_regenerate_id() function : basic functionality
 --EXTENSIONS--
 session
+--INI--
+session.sid_length = 32
+session.cookie_samesite=Lax
+session.cookie_httponly=1
 --SKIPIF--
 <?php
 
-include('skipif.inc');
+include 'skipif.inc';
 
 require __DIR__.'/../../../sapi/cgi/tests/include.inc';
 
@@ -52,7 +56,8 @@ var_dump(session_destroy());
 ob_end_flush();
 ?>');
 
-var_dump(`$php -n -d session.name=PHPSESSID $file`);
+$extra_arguments = getenv('TEST_PHP_EXTRA_ARGS');
+var_dump(shell_exec("$php $extra_arguments -d session.name=PHPSESSID $file"));
 
 unlink($file);
 
@@ -64,14 +69,14 @@ string(%d) "X-Powered-By: PHP/%d.%d.%s
 Expires: %s
 Cache-Control: no-store, no-cache, must-revalidate
 Pragma: no-cache
-Set-Cookie: PHPSESSID=%s; path=/
+Set-Cookie: PHPSESSID=%s; path=/; HttpOnly; SameSite=Lax
 Content-type: text/html; charset=UTF-8
 
 bool(true)
-Set-Cookie: PHPSESSID=%s; path=/
+Set-Cookie: PHPSESSID=%s; path=/; HttpOnly; SameSite=Lax
 bool(true)
 bool(true)
-Set-Cookie: PHPSESSID=%s; path=/
+Set-Cookie: PHPSESSID=%s; path=/; HttpOnly; SameSite=Lax
 bool(true)
 bool(true)
 string(32) "%s"

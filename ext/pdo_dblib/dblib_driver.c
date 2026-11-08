@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Wez Furlong <wez@php.net>                                    |
   |         Frank M. Kromann <frank@kromann.info>                        |
@@ -22,8 +20,8 @@
 #include "php.h"
 #include "php_ini.h"
 #include "ext/standard/info.h"
-#include "pdo/php_pdo.h"
-#include "pdo/php_pdo_driver.h"
+#include "ext/pdo/php_pdo.h"
+#include "ext/pdo/php_pdo_driver.h"
 #include "php_pdo_dblib.h"
 #include "php_pdo_dblib_int.h"
 #include "zend_exceptions.h"
@@ -77,11 +75,12 @@ static void dblib_handle_closer(pdo_dbh_t *dbh)
 	pdo_dblib_db_handle *H = (pdo_dblib_db_handle *)dbh->driver_data;
 
 	if (H) {
-		pdo_dblib_err_dtor(&H->err);
 		if (H->link) {
+			dbsetuserdata(H->link, (BYTE*) &H->err);
 			dbclose(H->link);
 			H->link = NULL;
 		}
+		pdo_dblib_err_dtor(&H->err);
 		if (H->login) {
 			dbfreelogin(H->login);
 			H->login = NULL;
@@ -145,25 +144,25 @@ static zend_long dblib_handle_doer(pdo_dbh_t *dbh, const zend_string *sql)
 static zend_string* dblib_handle_quoter(pdo_dbh_t *dbh, const zend_string *unquoted, enum pdo_param_type paramtype)
 {
 	pdo_dblib_db_handle *H = (pdo_dblib_db_handle *)dbh->driver_data;
-	bool use_national_character_set = 0;
+	bool use_national_character_set = false;
 	size_t i;
 	char *q;
-	size_t quotedlen = 0;
+	size_t quotedlen = 0, extralen = 0;
 	zend_string *quoted_str;
 
 	if (H->assume_national_character_set_strings) {
-		use_national_character_set = 1;
+		use_national_character_set = true;
 	}
 	if ((paramtype & PDO_PARAM_STR_NATL) == PDO_PARAM_STR_NATL) {
-		use_national_character_set = 1;
+		use_national_character_set = true;
 	}
 	if ((paramtype & PDO_PARAM_STR_CHAR) == PDO_PARAM_STR_CHAR) {
-		use_national_character_set = 0;
+		use_national_character_set = false;
 	}
 
 	/* Detect quoted length, adding extra char for doubled single quotes */
 	for (i = 0; i < ZSTR_LEN(unquoted); i++) {
-		if (ZSTR_VAL(unquoted)[i] == '\'') ++quotedlen;
+		if (ZSTR_VAL(unquoted)[i] == '\'') ++extralen;
 		++quotedlen;
 	}
 
@@ -171,6 +170,12 @@ static zend_string* dblib_handle_quoter(pdo_dbh_t *dbh, const zend_string *unquo
 	if (use_national_character_set) {
 		++quotedlen; /* N prefix */
 	}
+
+	if (UNEXPECTED(quotedlen > ZSTR_MAX_LEN - extralen)) {
+		return NULL;
+	}
+
+	quotedlen += extralen;
 	quoted_str = zend_string_alloc(quotedlen, 0);
 	q = ZSTR_VAL(quoted_str);
 	if (use_national_character_set) {
@@ -195,6 +200,8 @@ static zend_string* dblib_handle_quoter(pdo_dbh_t *dbh, const zend_string *unquo
 static bool pdo_dblib_transaction_cmd(const char *cmd, pdo_dbh_t *dbh)
 {
 	pdo_dblib_db_handle *H = (pdo_dblib_db_handle *)dbh->driver_data;
+
+	dbsetuserdata(H->link, (BYTE*) &H->err);
 
 	if (FAIL == dbcmd(H->link, cmd)) {
 		return false;
@@ -227,13 +234,14 @@ zend_string *dblib_handle_last_id(pdo_dbh_t *dbh, const zend_string *name)
 	pdo_dblib_db_handle *H = (pdo_dblib_db_handle *)dbh->driver_data;
 
 	RETCODE ret;
-	char *id = NULL;
-	size_t len;
-	zend_string *ret_id;
+	BYTE id[40];
+	DBINT len;
 
 	/*
 	 * Would use scope_identity() but it's not implemented on Sybase
 	 */
+
+	dbsetuserdata(H->link, (BYTE*) &H->err);
 
 	if (FAIL == dbcmd(H->link, "SELECT @@IDENTITY")) {
 		return NULL;
@@ -261,13 +269,14 @@ zend_string *dblib_handle_last_id(pdo_dbh_t *dbh, const zend_string *name)
 		return NULL;
 	}
 
-	id = emalloc(32);
-	len = dbconvert(NULL, (dbcoltype(H->link, 1)) , (dbdata(H->link, 1)) , (dbdatlen(H->link, 1)), SQLCHAR, (BYTE *)id, (DBINT)-1);
+	len = dbconvert(NULL, (dbcoltype(H->link, 1)) , (dbdata(H->link, 1)) , (dbdatlen(H->link, 1)), SQLCHAR, (BYTE *)id, (DBINT)sizeof(id));
 	dbcancel(H->link);
 
-	ret_id = zend_string_init(id, len, 0);
-	efree(id);
-	return ret_id;
+	if (len < 0) {
+		return NULL;
+	}
+
+	return zend_string_init((const char *) id, len, 0);
 }
 
 static bool dblib_set_attr(pdo_dbh_t *dbh, zend_long attr, zval *val)
@@ -290,10 +299,10 @@ static bool dblib_set_attr(pdo_dbh_t *dbh, zend_long attr, zval *val)
 			}
 			return SUCCEED == dbsettime(lval);
 		case PDO_DBLIB_ATTR_STRINGIFY_UNIQUEIDENTIFIER:
-			if (!pdo_get_long_param(&lval, val)) {
+			if (!pdo_get_bool_param(&bval, val)) {
 				return false;
 			}
-			H->stringify_uniqueidentifier = lval;
+			H->stringify_uniqueidentifier = bval;
 			return true;
 		case PDO_DBLIB_ATTR_SKIP_EMPTY_ROWSETS:
 			if (!pdo_get_bool_param(&bval, val)) {
@@ -302,10 +311,10 @@ static bool dblib_set_attr(pdo_dbh_t *dbh, zend_long attr, zval *val)
 			H->skip_empty_rowsets = bval;
 			return true;
 		case PDO_DBLIB_ATTR_DATETIME_CONVERT:
-			if (!pdo_get_long_param(&lval, val)) {
+			if (!pdo_get_bool_param(&bval, val)) {
 				return false;
 			}
-			H->datetime_convert = lval;
+			H->datetime_convert = bval;
 			return true;
 		default:
 			return false;
@@ -420,6 +429,17 @@ static int dblib_get_attribute(pdo_dbh_t *dbh, zend_long attr, zval *return_valu
 	return 1;
 }
 
+static zend_result dblib_handle_check_liveness(pdo_dbh_t *dbh)
+{
+	pdo_dblib_db_handle *H = (pdo_dblib_db_handle *)dbh->driver_data;
+
+	if (dbdead(H->link)) {
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+
 static const struct pdo_dbh_methods dblib_methods = {
 	dblib_handle_closer,
 	dblib_handle_preparer,
@@ -432,11 +452,12 @@ static const struct pdo_dbh_methods dblib_methods = {
 	dblib_handle_last_id, /* last insert id */
 	dblib_fetch_error, /* fetch error */
 	dblib_get_attribute, /* get attr */
-	NULL, /* check liveness */
+	dblib_handle_check_liveness, /* check_liveness */
 	NULL, /* get driver methods */
 	NULL, /* request shutdown */
 	NULL, /* in transaction, use PDO's internal tracking mechanism */
-	NULL /* get gc */
+	NULL, /* get gc */
+	NULL /* scanner */
 };
 
 static int pdo_dblib_handle_factory(pdo_dbh_t *dbh, zval *driver_options)
@@ -532,7 +553,6 @@ static int pdo_dblib_handle_factory(pdo_dbh_t *dbh, zval *driver_options)
 		}
 
 		if (i==nvers) {
-			printf("Invalid version '%s'\n", vars[5].optval);
 			pdo_raise_impl_error(dbh, NULL, "HY000", "PDO_DBLIB: Invalid version specified in connection string.");
 			goto cleanup; /* unknown version specified */
 		}

@@ -27,6 +27,7 @@ var_dump( fclose($file_handle) );  //Check for close operation on the file handl
 var_dump( get_resource_type($file_handle) );  //Check whether resource is lost after close operation
 $file_handle = fopen($file, "x");  //Opening the existing data file in 'x' mode to check for the warning message
 echo "*** Done ***\n";
+?>
 --CLEAN--
 <?php
 unlink(__DIR__."/007_variation7.tmp");
@@ -39,11 +40,11 @@ int(0)
 int(37)
 int(37)
 
-Notice: fread(): Read of 8192 bytes failed with errno=9 Bad file descriptor in %s on line %d
+Notice: fread(): Read of 8192 bytes failed with errno=9 Bad file %r(descriptor|number)%r in %s on line %d
 bool(false)
 int(0)
 bool(true)
 string(7) "Unknown"
 
-Warning: fopen(%s): Failed to open stream: File exists in %s on line %d
+Warning: fopen(): Failed to open stream: File exists in %s on line %d
 *** Done ***

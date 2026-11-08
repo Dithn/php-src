@@ -1,13 +1,11 @@
 --TEST--
 Test fopen() for write cp932 to UTF-8 path
+--EXTENSIONS--
+iconv
 --SKIPIF--
 <?php
-include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
-
-skip_if_not_win();
+if (PHP_OS_FAMILY !== 'Windows') die('skip windows only test');
 if (getenv("SKIP_SLOW_TESTS")) die("skip slow test");
-skip_if_no_required_exts();
-
 ?>
 --CONFLICTS--
 dir_cp932
@@ -21,8 +19,8 @@ dir_cp932
 include __DIR__ . DIRECTORY_SEPARATOR . "util.inc";
 
 $item = iconv('cp932', 'utf-8', "テストマルチバイト・パス"); // cp932 string
-$prefix = create_data("dir_cp932", "${item}42}");
-$fn = $prefix . DIRECTORY_SEPARATOR . "${item}33";
+$prefix = create_data("dir_cp932", "{$item}42}");
+$fn = $prefix . DIRECTORY_SEPARATOR . "{$item}33";
 
 $f = fopen($fn, 'w');
 if ($f) {

@@ -3,7 +3,7 @@ setting $_SESSION before session_start() should not cause segfault
 --EXTENSIONS--
 session
 --SKIPIF--
-<?php include('skipif.inc'); ?>
+<?php include 'skipif.inc'; ?>
 --INI--
 session.use_cookies=0
 session.cache_limiter=
@@ -16,7 +16,7 @@ error_reporting(E_ALL);
 
 class Kill {
     function __construct() {
-        global $HTTP_SESSION_VARS;
+        $_SESSION = [];
         session_start();
     }
 }

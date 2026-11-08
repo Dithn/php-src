@@ -1,4 +1,4 @@
-PHP 8.2 UPGRADE NOTES
+PHP 8.7 UPGRADE NOTES
 
 1. Backward Incompatible Changes
 2. New Features
@@ -18,26 +18,83 @@ PHP 8.2 UPGRADE NOTES
 ========================================
 1. Backward Incompatible Changes
 ========================================
+
+- Core:
+  . Block declaration support for the encoding declare has been removed as it
+    did not function properly.
+
+- Curl:
+  . curl_multi_exec() now throws a TypeError when $still_running cannot be
+    converted to an int.
+  . Nested arrays in CURLOPT_POSTFIELDS now throw a TypeError, instead of being
+    silently converted to the string "Array".
+
+- PDO:
+  . PDOStatement::bindColumn() now throws a ValueError when the column name is
+    not present in the result set. It previously reported the condition
+    through PDO::ATTR_ERRMODE and returned false.
+
+- Reflection:
+  . The public $name and $class properties of ReflectionClass,
+    ReflectionClassConstant, ReflectionProperty, ReflectionMethod,
+    ReflectionFunctionAbstract, ReflectionParameter, ReflectionExtension,
+    ReflectionZendExtension, ReflectionAttribute and ReflectionConstant are
+    now readonly.
+
+- SOAP:
+  . SoapClient no longer follows an HTTP redirect to a different origin
+    (scheme, host, or port) and throws a SoapFault instead. Previously the
+    request body and the configured credentials and headers were resent to
+    the new origin. A redirect from http to https on the same host is still
+    followed. Set the new follow_cross_origin_redirects option to true to
+    restore the previous behavior.
+
+- Session:
+  . Setting session.cookie_path to a value containing one of ";\r\n", or
+    session.cookie_domain to a value containing one of ",; \t\r\n\013\014",
+    now emits a warning and leaves the setting unchanged. Previously such a
+    value was appended to the Set-Cookie header verbatim, which let an
+    application terminate one attribute and append further ones.
+
+- Standard:
+  . bindec(), octdec(), hexdec() and base_convert() now throw an Exception
+    when the passed string contains characters that are invalid for the
+    specified number base.
+  . The number of filters that can be chained in a php://filter URL is limited
+    to 16 by default. Set the stream context option max_filter_count to change
+    this.
 
 ========================================
 2. New Features
 ========================================
 
 - Curl:
-  . Added CURLINFO_EFFECTIVE_METHOD option and returning the effective
-    HTTP method in curl_getinfo() return value.
+  . Multiple files can now be uploaded with the same field name by passing an
+    array of CURLFile or CURLStringFile objects to CURLOPT_POSTFIELDS.
 
-- OCI8:
-  . Added an oci8.prefetch_lob_size directive to tune LOB query performance
-    by reducing the number of round-trips between PHP and Oracle Database when
-    fetching LOBS. This is usable with Oracle Database 12.2 or later.
+- Intl:
+  . Added IntlRelativeDateTimeFormatter to format relative date and time offsets
+    using locale-specific text, such as "yesterday" or "in 3 days". Its format()
+    method uses a textual form when available and a numeric form otherwise,
+    while formatNumeric() always uses a numeric form. combineDateAndTime()
+    combines already formatted date and time strings according to the locale.
+    The constructor accepts an optional NumberFormatter to customize numeric
+    output; subsequent configuration changes to that object are reflected in
+    formatting results. Styles, capitalization contexts, and units are selected
+    using the IntlRelativeDateTimeFormatterStyle,
+    IntlRelativeDateTimeFormatterCapitalization, and
+    IntlRelativeDateTimeFormatterUnit enums, respectively.
+    RFC: https://wiki.php.net/rfc/reldateformatter
+  . Locale::acceptFromHttp() and locale_accept_from_http() now accept an
+    optional $availableLocales array argument. When given, the
+    Accept-Language header is matched against these locales instead of all
+    locales known to ICU, and the matching entry is returned as passed.
+    A ValueError is thrown if the array is empty or contains an invalid
+    locale, and a TypeError if it contains a non-string value.
 
-- PCRE:
-  . Added support for the "n" (NO_AUTO_CAPTURE) modifier, which makes simple
-    `(xyz)` groups non-capturing. Only named groups like `(?<name>xyz)` are
-    capturing. This only affects which groups are capturing, it is still
-    possible to use numbered subpattern references, and the matches array will
-    still contain numbered results.
+- Streams:
+  . The so_linger, so_rcvbuf and so_sndbuf stream socket context options are
+    now also applied to unix and unix datagram sockets.
 
 ========================================
 3. Changes in SAPI modules
@@ -47,67 +104,51 @@ PHP 8.2 UPGRADE NOTES
 4. Deprecated Functionality
 ========================================
 
-- Core:
-  . Creation of dynamic properties is deprecated, unless the class opts in by
-    using the #[AllowDynamicProperties] attribute. stdClass allows dynamic
-    properties. Usage of __get()/__set() is not affected by this change. A
-    dynamic properties deprecation warning can be addressed by:
-     - Declaring the property (preferred).
-     - Adding the #[AllowDynamicProperties] attribute to the class (which also
-       applies to all child classes).
-     - Using a WeakMap if you wish to associate additional data with an object
-       you do not own.
-
-  . Callables that are not accepted by the $callable() syntax (but are accepted
-    by call_user_func) are deprecated. In particular:
-
-        "self::method"
-        "parent::method"
-        "static::method"
-        ["self", "method"]
-        ["parent", "method"]
-        ["static", "method"]
-        ["Foo", "Bar::method"]
-        [new Foo, "Bar::method"]
-
-    This does not affect normal method callables like "A::method" or
-    ["A", "method"]. A deprecation notice is only emitted on call. Both
-    is_callable() and the callable type will silently accept these callables
-    until support for them is removed entirely.
-
-    RFC: https://wiki.php.net/rfc/deprecate_partially_supported_callables
-
-- Mbstring:
-  . Use of QPrint, Base64, Uuencode, and HTML-ENTITIES 'text encodings' is
-    deprecated for all Mbstring functions. Unlike all the other text
-    encodings supported by Mbstring, these do not encode a sequence of
-    Unicode codepoints, but rather a sequence of raw bytes. It is not
-    clear what the correct return values for most Mbstring functions should
-    be when one of these non-encodings is specified. Further, PHP has
-    separate, built-in implementations of all of them; for example, UUencoded
-    data can be handled using convert_uuencode/convert_uudecode.
-
 ========================================
 5. Changed Functions
 ========================================
 
-- DBA
-  . dba_open() and dba_popen() now have the following enforced function signature
-    dba_open(string $path, string $mode, ?string $handler = null, int $permission = 0o644, int $map_size = 0)
-  . dba_fetch()'s optional skip argument is now at the end in line with
-    PHP userland semantics its signature now is:
-    dba_fetch(string|array $key, $dba, int $skip = 0): string|false
-    The overloaded signature
-    dba_fetch(string|array $key, $skip, $dba): string|false
-    is still accepted, but it is recommended to use the new standard variant.
+- Standard:
+  . stream_select() no longer fails once a watched descriptor exceeds
+    FD_SETSIZE. The descriptor set now grows on demand on both POSIX (bitset)
+    and Windows (winsock fd_set), so code watching many streams works without
+    rebuilding PHP with --enable-fd-setsize. On Windows, selecting on more than
+    64 pipe or file handles no longer crashes; it fails with a warning, as that
+    path remains bounded by WaitForMultipleObjects().
 
 ========================================
 6. New Functions
 ========================================
 
+- Intl:
+  . Added Transliterator::toRules() and transliterator_to_rules() to export
+    rules that can be used to recreate a transliterator. The optional
+    $escapeUnprintable argument escapes unprintable characters when true.
+  . Added Collator::getRules() and collator_get_rules() to retrieve collation
+    tailoring rules as a UTF-8 string. These describe locale-specific adjustments
+    to the root collation order; the full root/UCA rules are not included. An
+    empty string is returned if no tailoring rules are available, or false if
+    the rules cannot be converted to UTF-8.
+
 ========================================
 7. New Classes and Interfaces
 ========================================
+
+- Intl:
+  . IntlRelativeDateTimeFormatter
+  . enum IntlRelativeDateTimeFormatterStyle
+  . enum IntlRelativeDateTimeFormatterCapitalization
+  . enum IntlRelativeDateTimeFormatterUnit
+    RFC: https://wiki.php.net/rfc/reldateformatter
+  . Added IntlNumberFormatter class to format a number with a given locale
+    and ICU number skeleton, which also covers measurement units, e.g.
+    "measure-unit/speed-kilometer-per-hour unit-width-full-name".
+    IntlNumberFormatter::format() accepts an int, a float or a decimal
+    string without exponent, the latter being formatted with arbitrary
+    precision.
+    IntlNumberFormatter::createFromSkeleton() rejects a scale/ option in
+    exponent notation, e.g. "scale/1e3".
+    It is supported from icu 63.
 
 ========================================
 8. Removed Extensions and SAPIs
@@ -117,28 +158,23 @@ PHP 8.2 UPGRADE NOTES
 9. Other Changes to Extensions
 ========================================
 
-- Zip:
-  . extension updated to 1.20.0 with new methods:
-    ZipArchive::clearError, getStreamName and getStreamIndex
-
 ========================================
 10. New Global Constants
 ========================================
-
-- COM_DOTNET:
-  . LOCALE_NEUTRAL
 
 ========================================
 11. Changes to INI File Handling
 ========================================
 
+- Opcache:
+  . opcache.max_accelerated_files now defaults to 16229 (previously 10000),
+    accepts values up to 1048793 (previously 1000000), and logs a warning for
+    values other than 223, 463, 983, 1979, 3907, 7963, 16229, 32531, 65407,
+    130987, 262237, 524521 and 1048793.
+
 ========================================
 12. Windows Support
 ========================================
-
-- Core:
-  . Windows specific error messages are no longer localized, but instead in
-    English to better match PHP error messages.
 
 ========================================
 13. Other Changes
@@ -147,3 +183,39 @@ PHP 8.2 UPGRADE NOTES
 ========================================
 14. Performance Improvements
 ========================================
+
+- Core:
+  . A flat unkeyed list assignment from an array literal with one value per
+    target, such as [$a, $b] = [$b, $a], no longer builds the array when the
+    result is unused: the values are evaluated in order, a variable among them
+    is copied, and they are assigned to the targets directly. A value its
+    target does not keep is now released at that assignment instead of after
+    the last one.
+
+- Standard:
+  . Improved performance of strcspn() and strpbrk() when searching longer strings
+    with a single-byte character mask.
+  . Improved performance of array_chunk() when not preserving keys.
+  . Improved performance of array_splice() when inserting without removing
+    elements.
+  . Improved performance of str_rot13().
+  . Improved performance of pack() for large strings using the a, A and Z
+    formats.
+  . Improved performance of htmlspecialchars(), htmlentities(),
+    html_entity_decode() and get_html_translation_table(), especially with
+    UTF-8.
+  . htmlspecialchars() returns its input without copying it when nothing needs
+    encoding.
+
+- MBString:
+  . Improved performance of mb_strlen for UTF-8 strings.
+  . Improved performance of mb_substr and mb_strpos for UTF-8 strings.
+
+- PDO:
+  . Improved performance of fetching rows with PDO::FETCH_BOTH, the default
+    fetch mode, for results with more than 4 columns.
+
+- PDO_PGSQL:
+  . Improved performance of the SQL parser that handles placeholders in
+    PDO::prepare() and, with emulated prepares, PDOStatement::execute().
+  . Improved performance of fetching integer columns.

@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: George Schlossnagle <george@omniti.com>                      |
   +----------------------------------------------------------------------+
@@ -16,30 +14,9 @@
 
 #include "php.h"
 #include "php_pdo_driver.h"
-#include "php_pdo_int.h"
+#include "pdo_sql_parser.h"
 
-#define PDO_PARSER_TEXT 1
-#define PDO_PARSER_BIND 2
-#define PDO_PARSER_BIND_POS 3
-#define PDO_PARSER_ESCAPED_QUESTION 4
-#define PDO_PARSER_EOI 5
-
-#define PDO_PARSER_BINDNO_ESCAPED_CHAR -1
-
-#define RET(i) {s->cur = cursor; return i; }
-#define SKIP_ONE(i) {s->cur = s->tok + 1; return i; }
-
-#define YYCTYPE         unsigned char
-#define YYCURSOR        cursor
-#define YYLIMIT         s->end
-#define YYMARKER        s->ptr
-#define YYFILL(n)		{ RET(PDO_PARSER_EOI); }
-
-typedef struct Scanner {
-	const char *ptr, *cur, *tok, *end;
-} Scanner;
-
-static int scan(Scanner *s)
+static int default_scanner(pdo_scanner_t *s)
 {
 	const char *cursor = s->cur;
 
@@ -47,18 +24,16 @@ static int scan(Scanner *s)
 	/*!re2c
 	BINDCHR		= [:][a-zA-Z0-9_]+;
 	QUESTION	= [?];
-	ESCQUESTION	= [?][?];
-	COMMENTS	= ("/*"([^*]+|[*]+[^/*])*[*]*"*/"|"--"[^\r\n]*);
-	SPECIALS	= [:?"'-/];
-	MULTICHAR	= [:]{2,};
+	COMMENTS	= ("/*"([^*]+|[*]+[^/*])*[*]*"*/"|"--".*);
+	SPECIALS	= [:?"'/-];
+	MULTICHAR	= ([:]{2,}|[?]{2,});
 	ANYNOEOF	= [\001-\377];
 	*/
 
 	/*!re2c
-		(["](([\\]ANYNOEOF)|ANYNOEOF\["\\])*["]) { RET(PDO_PARSER_TEXT); }
-		(['](([\\]ANYNOEOF)|ANYNOEOF\['\\])*[']) { RET(PDO_PARSER_TEXT); }
+		(["]((["]["])|ANYNOEOF\["])*["])		{ RET(PDO_PARSER_TEXT); }
+		(['](([']['])|ANYNOEOF\['])*['])		{ RET(PDO_PARSER_TEXT); }
 		MULTICHAR								{ RET(PDO_PARSER_TEXT); }
-		ESCQUESTION								{ RET(PDO_PARSER_ESCAPED_QUESTION); }
 		BINDCHR									{ RET(PDO_PARSER_BIND); }
 		QUESTION								{ RET(PDO_PARSER_BIND_POS); }
 		SPECIALS								{ SKIP_ONE(PDO_PARSER_TEXT); }
@@ -75,13 +50,18 @@ struct placeholder {
 	struct placeholder *next;
 };
 
+struct custom_quote {
+	const char *pos;
+	size_t len;
+};
+
 static void free_param_name(zval *el) {
 	zend_string_release(Z_PTR_P(el));
 }
 
 PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string **outquery)
 {
-	Scanner s;
+	pdo_scanner_t s;
 	char *newbuffer;
 	ptrdiff_t t;
 	uint32_t bindno = 0;
@@ -91,12 +71,42 @@ PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string
 	struct pdo_bound_param_data *param;
 	int query_type = PDO_PLACEHOLDER_NONE;
 	struct placeholder *placeholders = NULL, *placetail = NULL, *plc = NULL;
+	int (*scan)(pdo_scanner_t *s);
+	struct custom_quote custom_quote = {NULL, 0};
+
+	scan = stmt->dbh->methods->scanner ? stmt->dbh->methods->scanner : default_scanner;
 
 	s.cur = ZSTR_VAL(inquery);
 	s.end = s.cur + ZSTR_LEN(inquery) + 1;
 
 	/* phase 1: look for args */
 	while((t = scan(&s)) != PDO_PARSER_EOI) {
+		if (custom_quote.pos) {
+			/* Inside a custom quote */
+			if (t == PDO_PARSER_CUSTOM_QUOTE && custom_quote.len == s.cur - s.tok && !strncmp(s.tok, custom_quote.pos, custom_quote.len)) {
+				/* Matching closing quote found, end custom quoting */
+				custom_quote.pos = NULL;
+				custom_quote.len = 0;
+			} else if (t == PDO_PARSER_ESCAPED_QUESTION) {
+				/* An escaped question mark has been used inside a dollar quoted string, most likely as a workaround
+				 * as a single "?" would have been parsed as placeholder, due to the lack of support for dollar quoted
+				 * strings. For now, we emit a deprecation notice, but still process it */
+				php_error_docref(NULL, E_DEPRECATED, "Escaping question marks inside dollar quoted strings is not required anymore and is deprecated");
+
+				goto placeholder;
+			}
+
+			continue;
+		}
+
+		if (t == PDO_PARSER_CUSTOM_QUOTE) {
+			/* Start of a custom quote, keep a reference to search for the matching closing quote */
+			custom_quote.pos = s.tok;
+			custom_quote.len = s.cur - s.tok;
+
+			continue;
+		}
+
 		if (t == PDO_PARSER_BIND || t == PDO_PARSER_BIND_POS || t == PDO_PARSER_ESCAPED_QUESTION) {
 			if (t == PDO_PARSER_ESCAPED_QUESTION && stmt->supports_placeholders == PDO_PLACEHOLDER_POSITIONAL) {
 				/* escaped question marks unsupported, treat as text */
@@ -105,7 +115,7 @@ PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string
 
 			if (t == PDO_PARSER_BIND) {
 				ptrdiff_t len = s.cur - s.tok;
-				if ((ZSTR_VAL(inquery) < (s.cur - len)) && isalnum(*(s.cur - len - 1))) {
+				if ((ZSTR_VAL(inquery) < (s.cur - len)) && isalnum((unsigned char)s.cur[-len - 1])) {
 					continue;
 				}
 				query_type |= PDO_PLACEHOLDER_NAMED;
@@ -113,6 +123,7 @@ PDO_API int pdo_parse_params(pdo_stmt_t *stmt, zend_string *inquery, zend_string
 				query_type |= PDO_PLACEHOLDER_POSITIONAL;
 			}
 
+placeholder:
 			plc = emalloc(sizeof(*plc));
 			memset(plc, 0, sizeof(*plc));
 			plc->next = NULL;
@@ -242,6 +253,13 @@ safe:
 						if (buf) {
 							zend_string_release_ex(buf, 0);
 						}
+						if (plc->quoted == NULL) {
+							/* bork */
+							ret = -1;
+							strncpy(stmt->error_code, stmt->dbh->error_code, 6);
+							goto clean_up;
+						}
+
 					} else {
 						pdo_raise_impl_error(stmt->dbh, stmt, "HY105", "Expected a stream resource");
 						ret = -1;
@@ -280,6 +298,12 @@ safe:
 							}
 
 							plc->quoted = stmt->dbh->methods->quoter(stmt->dbh, buf, param_type);
+							if (plc->quoted == NULL) {
+								/* bork */
+								ret = -1;
+								strncpy(stmt->error_code, stmt->dbh->error_code, 6);
+								goto clean_up;
+							}
 						}
 					}
 

@@ -2,15 +2,14 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) Zend Technologies Ltd. (http://www.zend.com)           |
+   | Copyright © Zend Technologies Ltd., a subsidiary company of          |
+   |     Perforce Software, Inc., and Contributors.                       |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 2.00 of the Zend license,     |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | http://www.zend.com/license/2_00.txt.                                |
-   | If you did not receive a copy of the Zend license and are unable to  |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@zend.com so we can mail you a copy immediately.              |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Wez Furlong <wez@thebrainroom.com>                          |
    |          Scott MacVicar <scottmac@php.net>                           |
@@ -39,7 +38,7 @@ static void zend_stream_stdio_closer(void *handle) /* {{{ */
 
 static size_t zend_stream_stdio_fsizer(void *handle) /* {{{ */
 {
-	zend_stat_t buf;
+	zend_stat_t buf = {0};
 	if (handle && zend_fstat(fileno((FILE*)handle), &buf) == 0) {
 #ifdef S_ISREG
 		if (!S_ISREG(buf.st_mode)) {
@@ -161,7 +160,7 @@ ZEND_API zend_result zend_stream_fixup(zend_file_handle *file_handle, char **buf
 	if (file_size) {
 		ssize_t read;
 		size_t size = 0;
-		*buf = safe_emalloc(1, file_size, ZEND_MMAP_AHEAD);
+		*buf = safe_emalloc(file_size, sizeof(char), ZEND_MMAP_AHEAD);
 		while ((read = zend_stream_read(file_handle, *buf + size, file_size - size)) > 0) {
 			size += read;
 		}
@@ -214,7 +213,10 @@ static void zend_file_handle_dtor(zend_file_handle *fh) /* {{{ */
 {
 	switch (fh->type) {
 		case ZEND_HANDLE_FP:
-			fclose(fh->handle.fp);
+			if (fh->handle.fp) {
+				fclose(fh->handle.fp);
+				fh->handle.fp = NULL;
+			}
 			break;
 		case ZEND_HANDLE_STREAM:
 			if (fh->handle.stream.closer && fh->handle.stream.handle) {

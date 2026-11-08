@@ -4,7 +4,6 @@ JIT ASSIGN_DIM_OP: 001
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 --EXTENSIONS--
 opcache
 --FILE--
@@ -49,20 +48,20 @@ false_to_array(false);
 false_to_array_append(false);
 try {
     var_dump(false_to_array_invalid_index(false));
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 var_dump(false_to_array_nested(false));
 var_dump(false_to_array_nested_append(false));
 try {
     var_dump(false_to_array_nested_invalid_index(false));
-} catch (Error $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 try {
     var_dump(modulo_string([]));
-} catch (TypeError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 ?>
@@ -79,7 +78,7 @@ Warning: Undefined array key 2 in %s on line %d
 Deprecated: Automatic conversion of false to array is deprecated in %s on line %d
 
 Deprecated: Automatic conversion of false to array is deprecated in %s on line %d
-Illegal offset type
+TypeError: Cannot access offset of type array on array
 
 Deprecated: Automatic conversion of false to array is deprecated in %s on line %d
 
@@ -104,5 +103,5 @@ array(1) {
 }
 
 Deprecated: Automatic conversion of false to array is deprecated in %s on line %d
-Illegal offset type
-Unsupported operand types: null % string
+TypeError: Cannot access offset of type array on array
+TypeError: Unsupported operand types: null % string

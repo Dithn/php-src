@@ -1,5 +1,10 @@
-/* This is a generated file, edit the .stub.php file instead.
- * Stub hash: e553c28d2afd54f1ffcdbb0363aaa2079fabe07d */
+/* This is a generated file, edit mbstring.stub.php instead.
+ * Stub hash: f02c317efd6814f902ea75c9d222893713546845 */
+
+#if defined(HAVE_MBREGEX)
+#include "zend_attributes.h"
+#endif
+#include "zend_constants.h"
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_language, 0, 0, MAY_BE_STRING|MAY_BE_BOOL)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, language, IS_STRING, 1, "null")
@@ -118,6 +123,20 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_mb_strtolower arginfo_mb_strtoupper
 
+#define arginfo_mb_ucfirst arginfo_mb_strtoupper
+
+#define arginfo_mb_lcfirst arginfo_mb_strtoupper
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_trim, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, characters, IS_STRING, 1, "null")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, encoding, IS_STRING, 1, "null")
+ZEND_END_ARG_INFO()
+
+#define arginfo_mb_ltrim arginfo_mb_trim
+
+#define arginfo_mb_rtrim arginfo_mb_trim
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_detect_encoding, 0, 1, MAY_BE_STRING|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_MASK(0, encodings, MAY_BE_ARRAY|MAY_BE_STRING|MAY_BE_NULL, "null")
@@ -177,7 +196,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_send_mail, 0, 3, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, additional_params, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_get_info, 0, 0, MAY_BE_ARRAY|MAY_BE_STRING|MAY_BE_LONG|MAY_BE_FALSE)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_get_info, 0, 0, MAY_BE_ARRAY|MAY_BE_STRING|MAY_BE_LONG|MAY_BE_FALSE|MAY_BE_NULL)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, type, IS_STRING, 0, "\"all\"")
 ZEND_END_ARG_INFO()
 
@@ -198,110 +217,87 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_chr, 0, 1, MAY_BE_STRING|MAY_
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, encoding, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_str_pad, 0, 2, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, length, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pad_string, IS_STRING, 0, "\" \"")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pad_type, IS_LONG, 0, "STR_PAD_RIGHT")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, encoding, IS_STRING, 1, "null")
+ZEND_END_ARG_INFO()
+
 #if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_regex_encoding, 0, 0, MAY_BE_STRING|MAY_BE_BOOL)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, encoding, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg, 0, 2, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(1, matches, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 #define arginfo_mb_eregi arginfo_mb_ereg
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_ereg_replace, 0, 3, MAY_BE_STRING|MAY_BE_FALSE|MAY_BE_NULL)
 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, replacement, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 #define arginfo_mb_eregi_replace arginfo_mb_ereg_replace
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_ereg_replace_callback, 0, 3, MAY_BE_STRING|MAY_BE_FALSE|MAY_BE_NULL)
 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, callback, IS_CALLABLE, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_split, 0, 2, MAY_BE_ARRAY|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, limit, IS_LONG, 0, "-1")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg_match, 0, 2, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, pattern, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg_search, 0, 0, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pattern, IS_STRING, 1, "null")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_ereg_search_pos, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pattern, IS_STRING, 1, "null")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 #define arginfo_mb_ereg_search_regs arginfo_mb_ereg_search_pos
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg_search_init, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, string, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, pattern, IS_STRING, 1, "null")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_mb_ereg_search_getregs, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg_search_getpos, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_ereg_search_setpos, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, offset, IS_LONG, 0)
 ZEND_END_ARG_INFO()
-#endif
 
-#if defined(HAVE_MBREGEX)
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_mb_regex_set_options, 0, 0, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 #endif
-
 
 ZEND_FUNCTION(mb_language);
 ZEND_FUNCTION(mb_internal_encoding);
@@ -331,6 +327,11 @@ ZEND_FUNCTION(mb_convert_encoding);
 ZEND_FUNCTION(mb_convert_case);
 ZEND_FUNCTION(mb_strtoupper);
 ZEND_FUNCTION(mb_strtolower);
+ZEND_FUNCTION(mb_ucfirst);
+ZEND_FUNCTION(mb_lcfirst);
+ZEND_FUNCTION(mb_trim);
+ZEND_FUNCTION(mb_ltrim);
+ZEND_FUNCTION(mb_rtrim);
 ZEND_FUNCTION(mb_detect_encoding);
 ZEND_FUNCTION(mb_list_encodings);
 ZEND_FUNCTION(mb_encoding_aliases);
@@ -346,55 +347,25 @@ ZEND_FUNCTION(mb_check_encoding);
 ZEND_FUNCTION(mb_scrub);
 ZEND_FUNCTION(mb_ord);
 ZEND_FUNCTION(mb_chr);
+ZEND_FUNCTION(mb_str_pad);
 #if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_regex_encoding);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_eregi);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_replace);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_eregi_replace);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_replace_callback);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_split);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_match);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_pos);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_regs);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_init);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_getregs);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_getpos);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_ereg_search_setpos);
-#endif
-#if defined(HAVE_MBREGEX)
 ZEND_FUNCTION(mb_regex_set_options);
 #endif
-
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(mb_language, arginfo_mb_language)
@@ -425,6 +396,11 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FE(mb_convert_case, arginfo_mb_convert_case)
 	ZEND_FE(mb_strtoupper, arginfo_mb_strtoupper)
 	ZEND_FE(mb_strtolower, arginfo_mb_strtolower)
+	ZEND_FE(mb_ucfirst, arginfo_mb_ucfirst)
+	ZEND_FE(mb_lcfirst, arginfo_mb_lcfirst)
+	ZEND_FE(mb_trim, arginfo_mb_trim)
+	ZEND_FE(mb_ltrim, arginfo_mb_ltrim)
+	ZEND_FE(mb_rtrim, arginfo_mb_rtrim)
 	ZEND_FE(mb_detect_encoding, arginfo_mb_detect_encoding)
 	ZEND_FE(mb_list_encodings, arginfo_mb_list_encodings)
 	ZEND_FE(mb_encoding_aliases, arginfo_mb_encoding_aliases)
@@ -440,53 +416,164 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FE(mb_scrub, arginfo_mb_scrub)
 	ZEND_FE(mb_ord, arginfo_mb_ord)
 	ZEND_FE(mb_chr, arginfo_mb_chr)
+	ZEND_FE(mb_str_pad, arginfo_mb_str_pad)
 #if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_regex_encoding, arginfo_mb_regex_encoding)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg, arginfo_mb_ereg)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_eregi, arginfo_mb_eregi)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_replace, arginfo_mb_ereg_replace)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_eregi_replace, arginfo_mb_eregi_replace)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_replace_callback, arginfo_mb_ereg_replace_callback)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_split, arginfo_mb_split)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_match, arginfo_mb_ereg_match)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search, arginfo_mb_ereg_search)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_pos, arginfo_mb_ereg_search_pos)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_regs, arginfo_mb_ereg_search_regs)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_init, arginfo_mb_ereg_search_init)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_getregs, arginfo_mb_ereg_search_getregs)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_getpos, arginfo_mb_ereg_search_getpos)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_ereg_search_setpos, arginfo_mb_ereg_search_setpos)
-#endif
-#if defined(HAVE_MBREGEX)
-	ZEND_FE(mb_regex_set_options, arginfo_mb_regex_set_options)
+	ZEND_RAW_FENTRY("mb_regex_encoding", zif_mb_regex_encoding, arginfo_mb_regex_encoding, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg", zif_mb_ereg, arginfo_mb_ereg, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_eregi", zif_mb_eregi, arginfo_mb_eregi, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_replace", zif_mb_ereg_replace, arginfo_mb_ereg_replace, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_eregi_replace", zif_mb_eregi_replace, arginfo_mb_eregi_replace, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_replace_callback", zif_mb_ereg_replace_callback, arginfo_mb_ereg_replace_callback, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_split", zif_mb_split, arginfo_mb_split, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_match", zif_mb_ereg_match, arginfo_mb_ereg_match, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search", zif_mb_ereg_search, arginfo_mb_ereg_search, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_pos", zif_mb_ereg_search_pos, arginfo_mb_ereg_search_pos, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_regs", zif_mb_ereg_search_regs, arginfo_mb_ereg_search_regs, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_init", zif_mb_ereg_search_init, arginfo_mb_ereg_search_init, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_getregs", zif_mb_ereg_search_getregs, arginfo_mb_ereg_search_getregs, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_getpos", zif_mb_ereg_search_getpos, arginfo_mb_ereg_search_getpos, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_ereg_search_setpos", zif_mb_ereg_search_setpos, arginfo_mb_ereg_search_setpos, ZEND_ACC_DEPRECATED, NULL, NULL)
+	ZEND_RAW_FENTRY("mb_regex_set_options", zif_mb_regex_set_options, arginfo_mb_regex_set_options, ZEND_ACC_DEPRECATED, NULL, NULL)
 #endif
 	ZEND_FE_END
 };
+
+static void register_mbstring_symbols(int module_number)
+{
+#if defined(HAVE_MBREGEX)
+	zend_constant *const_MB_ONIGURUMA_VERSION = REGISTER_STRING_CONSTANT("MB_ONIGURUMA_VERSION", php_mb_oniguruma_version, CONST_PERSISTENT | CONST_DEPRECATED);
+#endif
+	REGISTER_LONG_CONSTANT("MB_CASE_UPPER", PHP_UNICODE_CASE_UPPER, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_LOWER", PHP_UNICODE_CASE_LOWER, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_TITLE", PHP_UNICODE_CASE_TITLE, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_FOLD", PHP_UNICODE_CASE_FOLD, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_UPPER_SIMPLE", PHP_UNICODE_CASE_UPPER_SIMPLE, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_LOWER_SIMPLE", PHP_UNICODE_CASE_LOWER_SIMPLE, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_TITLE_SIMPLE", PHP_UNICODE_CASE_TITLE_SIMPLE, CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MB_CASE_FOLD_SIMPLE", PHP_UNICODE_CASE_FOLD_SIMPLE, CONST_PERSISTENT);
+
+#if defined(HAVE_MBREGEX)
+
+	zend_attribute *attribute_Deprecated_func_mb_regex_encoding_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_regex_encoding", sizeof("mb_regex_encoding") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_regex_encoding_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_regex_encoding_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_regex_encoding_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_regex_encoding_0->args[1].value, attribute_Deprecated_func_mb_regex_encoding_0_arg1_str);
+	attribute_Deprecated_func_mb_regex_encoding_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg", sizeof("mb_ereg") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_0->args[1].value, attribute_Deprecated_func_mb_ereg_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_eregi_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_eregi", sizeof("mb_eregi") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_eregi_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_eregi_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_eregi_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_eregi_0->args[1].value, attribute_Deprecated_func_mb_eregi_0_arg1_str);
+	attribute_Deprecated_func_mb_eregi_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_replace_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_replace", sizeof("mb_ereg_replace") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_replace_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_replace_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_replace_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_replace_0->args[1].value, attribute_Deprecated_func_mb_ereg_replace_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_replace_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_eregi_replace_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_eregi_replace", sizeof("mb_eregi_replace") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_eregi_replace_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_eregi_replace_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_eregi_replace_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_eregi_replace_0->args[1].value, attribute_Deprecated_func_mb_eregi_replace_0_arg1_str);
+	attribute_Deprecated_func_mb_eregi_replace_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_replace_callback_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_replace_callback", sizeof("mb_ereg_replace_callback") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_replace_callback_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_replace_callback_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_replace_callback_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_replace_callback_0->args[1].value, attribute_Deprecated_func_mb_ereg_replace_callback_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_replace_callback_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_split_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_split", sizeof("mb_split") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_split_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_split_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_split_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_split_0->args[1].value, attribute_Deprecated_func_mb_split_0_arg1_str);
+	attribute_Deprecated_func_mb_split_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_match_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_match", sizeof("mb_ereg_match") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_match_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_match_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_match_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_match_0->args[1].value, attribute_Deprecated_func_mb_ereg_match_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_match_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search", sizeof("mb_ereg_search") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_pos_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_pos", sizeof("mb_ereg_search_pos") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_pos_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_pos_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_pos_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_pos_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_pos_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_pos_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_regs_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_regs", sizeof("mb_ereg_search_regs") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_regs_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_regs_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_regs_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_regs_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_regs_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_regs_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_init_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_init", sizeof("mb_ereg_search_init") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_init_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_init_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_init_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_init_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_init_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_init_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_getregs_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_getregs", sizeof("mb_ereg_search_getregs") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_getregs_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_getregs_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_getregs_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_getregs_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_getregs_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_getregs_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_getpos_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_getpos", sizeof("mb_ereg_search_getpos") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_getpos_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_getpos_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_getpos_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_getpos_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_getpos_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_getpos_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_ereg_search_setpos_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_ereg_search_setpos", sizeof("mb_ereg_search_setpos") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_setpos_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_ereg_search_setpos_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_ereg_search_setpos_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_ereg_search_setpos_0->args[1].value, attribute_Deprecated_func_mb_ereg_search_setpos_0_arg1_str);
+	attribute_Deprecated_func_mb_ereg_search_setpos_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+
+	zend_attribute *attribute_Deprecated_func_mb_regex_set_options_0 = zend_add_function_attribute(zend_hash_str_find_ptr(CG(function_table), "mb_regex_set_options", sizeof("mb_regex_set_options") - 1), ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	ZVAL_STR(&attribute_Deprecated_func_mb_regex_set_options_0->args[0].value, ZSTR_KNOWN(ZEND_STR_8_DOT_6));
+	attribute_Deprecated_func_mb_regex_set_options_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_func_mb_regex_set_options_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_func_mb_regex_set_options_0->args[1].value, attribute_Deprecated_func_mb_regex_set_options_0_arg1_str);
+	attribute_Deprecated_func_mb_regex_set_options_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+#endif
+#if defined(HAVE_MBREGEX)
+
+	zend_attribute *attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0 = zend_add_global_constant_attribute(const_MB_ONIGURUMA_VERSION, ZSTR_KNOWN(ZEND_STR_DEPRECATED_CAPITALIZED), 2);
+	zend_string *attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0_arg0_str = zend_string_init("8.6", strlen("8.6"), 1);
+	ZVAL_STR(&attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0->args[0].value, attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0_arg0_str);
+	attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0->args[0].name = ZSTR_KNOWN(ZEND_STR_SINCE);
+	zend_string *attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0_arg1_str = zend_string_init("because the underlying library is no longer maintained", strlen("because the underlying library is no longer maintained"), 1);
+	ZVAL_STR(&attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0->args[1].value, attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0_arg1_str);
+	attribute_Deprecated_const_MB_ONIGURUMA_VERSION_0->args[1].name = ZSTR_KNOWN(ZEND_STR_MESSAGE);
+#endif
+}

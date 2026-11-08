@@ -26,12 +26,16 @@ enum CustomFoo implements JsonSerializable {
 function test($value) {
     var_dump(json_encode($value));
     echo json_last_error_msg() . "\n";
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        echo json_last_error() . ' === '  . JSON_ERROR_NON_BACKED_ENUM . ":\n";
+        var_dump(json_last_error() === JSON_ERROR_NON_BACKED_ENUM);
+    }
 
     try {
         var_dump(json_encode($value, JSON_THROW_ON_ERROR));
         echo json_last_error_msg() . "\n";
-    } catch (Exception $e) {
-        echo get_class($e) . ': ' . $e->getMessage() . "\n";
+    } catch (Throwable $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
     }
 }
 
@@ -44,6 +48,8 @@ test(CustomFoo::Bar);
 --EXPECT--
 bool(false)
 Non-backed enums have no default serialization
+11 === 11:
+bool(true)
 JsonException: Non-backed enums have no default serialization
 string(1) "0"
 No error

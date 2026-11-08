@@ -1,14 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) The PHP Group                                          |
+   | Copyright © The PHP Group and Contributors.                          |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 3.01 of the PHP license,      |
-   | that is bundled with this package in the file LICENSE, and is        |
-   | available through the world-wide-web at the following url:           |
-   | https://www.php.net/license/3_01.txt                                 |
-   | If you did not receive a copy of the PHP license and are unable to   |
-   | obtain it through the world-wide-web, please send a note to          |
-   | license@php.net so we can mail you a copy immediately.               |
+   | This source file is subject to the Modified BSD License that is      |
+   | bundled with this package in the file LICENSE, and is available      |
+   | through the World Wide Web at <https://www.php.net/license/>.        |
+   |                                                                      |
+   | SPDX-License-Identifier: BSD-3-Clause                                |
    +----------------------------------------------------------------------+
    | Authors: Jerome Loyet <jerome@loyet.net>                             |
    +----------------------------------------------------------------------+
@@ -19,14 +17,14 @@
 #include "../fpm.h"
 #include "../zlog.h"
 
-#ifdef HAVE_PORT
+#ifdef HAVE_EVENT_PORTS
 
 #include <port.h>
 #include <poll.h>
 #include <errno.h>
 
 static int fpm_event_port_init(int max);
-static int fpm_event_port_clean();
+static int fpm_event_port_clean(void);
 static int fpm_event_port_wait(struct fpm_event_queue_s *queue, unsigned long int timeout);
 static int fpm_event_port_add(struct fpm_event_s *ev);
 static int fpm_event_port_remove(struct fpm_event_s *ev);
@@ -45,19 +43,19 @@ port_event_t *events = NULL;
 int nevents = 0;
 static int pfd = -1;
 
-#endif /* HAVE_PORT */
+#endif /* HAVE_EVENT_PORTS */
 
 struct fpm_event_module_s *fpm_event_port_module(void) /* {{{ */
 {
-#ifdef HAVE_PORT
+#ifdef HAVE_EVENT_PORTS
 	return &port_module;
 #else
 	return NULL;
-#endif /* HAVE_PORT */
+#endif /* HAVE_EVENT_PORTS */
 }
 /* }}} */
 
-#ifdef HAVE_PORT
+#ifdef HAVE_EVENT_PORTS
 
 /*
  * Init the module
@@ -90,7 +88,7 @@ static int fpm_event_port_init(int max) /* {{{ */
 /*
  * Clean the module
  */
-static int fpm_event_port_clean() /* {{{ */
+static int fpm_event_port_clean(void)
 {
 	if (pfd > -1) {
 		close(pfd);
@@ -105,7 +103,6 @@ static int fpm_event_port_clean() /* {{{ */
 	nevents = 0;
 	return 0;
 }
-/* }}} */
 
 /*
  * wait for events or timeout
@@ -145,14 +142,20 @@ static int fpm_event_port_wait(struct fpm_event_queue_s *queue, unsigned long in
 	}
 
 	for (i = 0; i < nget; i++) {
+		struct fpm_event_s *ev;
 
 		/* do we have a ptr to the event ? */
 		if (!events[i].portev_user) {
 			continue;
 		}
 
+		ev = (struct fpm_event_s *)events[i].portev_user;
+
+		/* re-associate for next event */
+		fpm_event_port_add(ev);
+
 		/* fire the event */
-		fpm_event_fire((struct fpm_event_s *)events[i].portev_user);
+		fpm_event_fire(ev);
 
 		/* sanity check */
 		if (fpm_globals.parent_pid != getpid()) {
@@ -191,4 +194,4 @@ static int fpm_event_port_remove(struct fpm_event_s *ev) /* {{{ */
 }
 /* }}} */
 
-#endif /* HAVE_PORT */
+#endif /* HAVE_EVENT_PORTS */

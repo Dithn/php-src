@@ -1,14 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Ulf Wendel <uw@php.net>                                     |
@@ -58,7 +56,7 @@ static bool mysqlnd_stmt_check_state(const MYSQLND_STMT_DATA *stmt)
 {
 	const MYSQLND_CONN_DATA *conn = stmt->conn;
 	if (stmt->state != MYSQLND_STMT_WAITING_USE_OR_STORE) {
-		return 0;
+		return false;
 	}
 	if (stmt->cursor_exists) {
 		return GET_CONNECTION_STATE(&conn->state) == CONN_READY;
@@ -348,6 +346,9 @@ mysqlnd_stmt_prepare_read_eof(MYSQLND_STMT * s)
 	if (FAIL == (ret = PACKET_READ(conn, &fields_eof))) {
 		if (stmt->result) {
 			stmt->result->m.free_result_contents(stmt->result);
+			/* The memset() below resets the statement, so release what it still owns first. */
+			conn->m->free_reference(conn);
+			mnd_efree(stmt->execute_cmd_buffer.buffer);
 			/* XXX: This will crash, because we will null also the methods.
 				But seems it happens in extreme cases or doesn't. Should be fixed by exporting a function
 				(from mysqlnd_driver.c?) to do the reset.
@@ -373,8 +374,6 @@ MYSQLND_METHOD(mysqlnd_stmt, prepare)(MYSQLND_STMT * const s, const char * const
 {
 	MYSQLND_STMT_DATA * stmt = s? s->data : NULL;
 	MYSQLND_CONN_DATA * conn = stmt? stmt->conn : NULL;
-	MYSQLND_STMT * s_to_prepare = s;
-	MYSQLND_STMT_DATA * stmt_to_prepare = stmt;
 
 	DBG_ENTER("mysqlnd_stmt::prepare");
 	if (!stmt || !conn) {
@@ -390,76 +389,15 @@ MYSQLND_METHOD(mysqlnd_stmt, prepare)(MYSQLND_STMT * const s, const char * const
 	SET_EMPTY_ERROR(conn->error_info);
 
 	if (stmt->state > MYSQLND_STMT_INITTED) {
-		/* See if we have to clean the wire */
-		if (stmt->state == MYSQLND_STMT_WAITING_USE_OR_STORE) {
-			/* Do implicit use_result and then flush the result */
-			stmt->default_rset_handler = s->m->use_result;
-			stmt->default_rset_handler(s);
-		}
-		/* No 'else' here please :) */
-		if (stmt->state > MYSQLND_STMT_WAITING_USE_OR_STORE && stmt->result) {
-			stmt->result->m.skip_result(stmt->result);
-		}
 		/*
-		  Create a new test statement, which we will prepare, but if anything
-		  fails, we will scrap it.
+		  Create a new prepared statement and destroy the previous one.
 		*/
-		s_to_prepare = conn->m->stmt_init(conn);
+		MYSQLND_STMT * s_to_prepare = conn->m->stmt_init(conn);
 		if (!s_to_prepare) {
 			goto fail;
 		}
-		stmt_to_prepare = s_to_prepare->data;
-	}
+		MYSQLND_STMT_DATA * stmt_to_prepare = s_to_prepare->data;
 
-	{
-		enum_func_status ret = FAIL;
-		const MYSQLND_CSTRING query_string = {query, query_len};
-
-		ret = conn->command->stmt_prepare(conn, query_string);
-		if (FAIL == ret) {
-			COPY_CLIENT_ERROR(stmt->error_info, *conn->error_info);
-			goto fail;
-		}
-	}
-
-	if (FAIL == mysqlnd_stmt_read_prepare_response(s_to_prepare)) {
-		goto fail;
-	}
-
-	if (stmt_to_prepare->param_count) {
-		if (FAIL == mysqlnd_stmt_skip_metadata(s_to_prepare) ||
-			FAIL == mysqlnd_stmt_prepare_read_eof(s_to_prepare))
-		{
-			goto fail;
-		}
-	}
-
-	/*
-	  Read metadata only if there is actual result set.
-	  Beware that SHOW statements bypass the PS framework and thus they send
-	  no metadata at prepare.
-	*/
-	if (stmt_to_prepare->field_count) {
-		MYSQLND_RES * result = conn->m->result_init(stmt_to_prepare->field_count);
-		if (!result) {
-			SET_OOM_ERROR(conn->error_info);
-			goto fail;
-		}
-		/* Allocate the result now as it is needed for the reading of metadata */
-		stmt_to_prepare->result = result;
-
-		result->conn = conn->m->get_reference(conn);
-
-		result->type = MYSQLND_RES_PS_BUF;
-
-		if (FAIL == result->m.read_result_metadata(result, conn) ||
-			FAIL == mysqlnd_stmt_prepare_read_eof(s_to_prepare))
-		{
-			goto fail;
-		}
-	}
-
-	if (stmt_to_prepare != stmt) {
 		/* swap */
 		size_t real_size = sizeof(MYSQLND_STMT) + mysqlnd_plugin_count() * sizeof(void *);
 		char * tmp_swap = mnd_emalloc(real_size);
@@ -474,16 +412,60 @@ MYSQLND_METHOD(mysqlnd_stmt, prepare)(MYSQLND_STMT * const s, const char * const
 		}
 		s_to_prepare->m->dtor(s_to_prepare, TRUE);
 	}
+
+	{
+		enum_func_status ret = FAIL;
+		const MYSQLND_CSTRING query_string = {query, query_len};
+
+		ret = conn->command->stmt_prepare(conn, query_string);
+		if (FAIL == ret) {
+			COPY_CLIENT_ERROR(stmt->error_info, *conn->error_info);
+			goto fail;
+		}
+	}
+
+	if (FAIL == mysqlnd_stmt_read_prepare_response(s)) {
+		goto fail;
+	}
+
+	if (stmt->param_count) {
+		if (FAIL == mysqlnd_stmt_skip_metadata(s) ||
+			FAIL == mysqlnd_stmt_prepare_read_eof(s))
+		{
+			goto fail;
+		}
+	}
+
+	/*
+	  Read metadata only if there is actual result set.
+	  Beware that SHOW statements bypass the PS framework and thus they send
+	  no metadata at prepare.
+	*/
+	if (stmt->field_count) {
+		MYSQLND_RES * result = conn->m->result_init(stmt->field_count);
+		if (!result) {
+			SET_OOM_ERROR(conn->error_info);
+			goto fail;
+		}
+		/* Allocate the result now as it is needed for the reading of metadata */
+		stmt->result = result;
+
+		result->conn = conn->m->get_reference(conn);
+
+		result->type = MYSQLND_RES_PS_BUF;
+
+		if (FAIL == result->m.read_result_metadata(result, conn) ||
+			FAIL == mysqlnd_stmt_prepare_read_eof(s))
+		{
+			goto fail;
+		}
+	}
+
 	stmt->state = MYSQLND_STMT_PREPARED;
 	DBG_INF("PASS");
 	DBG_RETURN(PASS);
 
 fail:
-	if (stmt_to_prepare != stmt && s_to_prepare) {
-		s_to_prepare->m->dtor(s_to_prepare, TRUE);
-	}
-	stmt->state = MYSQLND_STMT_INITTED;
-
 	DBG_INF("FAIL");
 	DBG_RETURN(FAIL);
 }
@@ -531,6 +513,7 @@ mysqlnd_stmt_execute_parse_response(MYSQLND_STMT * const s, enum_mysqlnd_parse_e
 
 		stmt->state = MYSQLND_STMT_EXECUTED;
 		if (conn->last_query_type == QUERY_UPSERT || conn->last_query_type == QUERY_LOAD_LOCAL) {
+			stmt->field_count = conn->field_count;
 			DBG_INF("PASS");
 			DBG_RETURN(PASS);
 		}
@@ -671,8 +654,11 @@ MYSQLND_METHOD(mysqlnd_stmt, send_execute)(MYSQLND_STMT * const s, const enum_my
 		  Executed, but the user hasn't started to fetch
 		  This will clean also the metadata, but after the EXECUTE call we will
 		  have it again.
+		  stmt->result may be freed and nullified by free_stmt_result, transitively called from flush.
 		*/
-		stmt->result->m.free_result_buffers(stmt->result);
+		if (stmt->result) {
+			stmt->result->m.free_result_buffers(stmt->result);
+		}
 
 		stmt->state = MYSQLND_STMT_PREPARED;
 	} else if (stmt->state < MYSQLND_STMT_PREPARED) {
@@ -780,7 +766,7 @@ mysqlnd_fetch_stmt_row_cursor(MYSQLND_RES * result, zval **row_ptr, const unsign
 
 	DBG_ENTER("mysqlnd_fetch_stmt_row_cursor");
 
-	if (!stmt || !stmt->conn || !result || !result->conn || !result->unbuf) {
+	if (!stmt->conn || !result->conn) {
 		DBG_ERR("no statement");
 		DBG_RETURN(FAIL);
 	}
@@ -1334,7 +1320,7 @@ MYSQLND_METHOD(mysqlnd_stmt, bind_one_result)(MYSQLND_STMT * const s, unsigned i
 	MYSQLND_STMT_DATA * stmt = s? s->data : NULL;
 	MYSQLND_CONN_DATA * conn = stmt? stmt->conn : NULL;
 
-	DBG_ENTER("mysqlnd_stmt::bind_result");
+	DBG_ENTER("mysqlnd_stmt::bind_one_result");
 	if (!stmt || !conn) {
 		DBG_RETURN(FAIL);
 	}
@@ -1568,18 +1554,6 @@ MYSQLND_METHOD(mysqlnd_stmt, attr_set)(MYSQLND_STMT * const s,
 			stmt->flags = ival;
 			break;
 		}
-		case STMT_ATTR_PREFETCH_ROWS: {
-			unsigned long ival = *(unsigned long *) value;
-			if (ival == 0) {
-				ival = MYSQLND_DEFAULT_PREFETCH_ROWS;
-			} else if (ival > 1) {
-				SET_CLIENT_ERROR(stmt->error_info, CR_NOT_IMPLEMENTED, UNKNOWN_SQLSTATE, "Not implemented");
-				DBG_INF("FAIL");
-				DBG_RETURN(FAIL);
-			}
-			stmt->prefetch_rows = ival;
-			break;
-		}
 		default:
 			SET_CLIENT_ERROR(stmt->error_info, CR_NOT_IMPLEMENTED, UNKNOWN_SQLSTATE, "Not implemented");
 			DBG_RETURN(FAIL);
@@ -1597,7 +1571,7 @@ MYSQLND_METHOD(mysqlnd_stmt, attr_get)(const MYSQLND_STMT * const s,
 									   void * const value)
 {
 	MYSQLND_STMT_DATA * stmt = s? s->data : NULL;
-	DBG_ENTER("mysqlnd_stmt::attr_set");
+	DBG_ENTER("mysqlnd_stmt::attr_get");
 	if (!stmt) {
 		DBG_RETURN(FAIL);
 	}
@@ -1610,10 +1584,6 @@ MYSQLND_METHOD(mysqlnd_stmt, attr_get)(const MYSQLND_STMT * const s,
 			break;
 		case STMT_ATTR_CURSOR_TYPE:
 			*(unsigned long *) value = stmt->flags;
-			DBG_INF_FMT("value=%lu", *(unsigned long *) value);
-			break;
-		case STMT_ATTR_PREFETCH_ROWS:
-			*(unsigned long *) value = stmt->prefetch_rows;
 			DBG_INF_FMT("value=%lu", *(unsigned long *) value);
 			break;
 		default:
@@ -1786,6 +1756,7 @@ MYSQLND_METHOD_PRIVATE(mysqlnd_stmt, close_on_server)(MYSQLND_STMT * const s, bo
 	MYSQLND_STMT_DATA * stmt = s? s->data : NULL;
 	MYSQLND_CONN_DATA * conn = stmt? stmt->conn : NULL;
 	enum_mysqlnd_collected_stats statistic = STAT_LAST;
+	enum_func_status ret = PASS;
 
 	DBG_ENTER("mysqlnd_stmt::close_on_server");
 	if (!stmt || !conn) {
@@ -1823,14 +1794,7 @@ MYSQLND_METHOD_PRIVATE(mysqlnd_stmt, close_on_server)(MYSQLND_STMT * const s, bo
 														STAT_FREE_RESULT_EXPLICIT);
 
 		if (GET_CONNECTION_STATE(&conn->state) == CONN_READY) {
-			enum_func_status ret = FAIL;
-			const size_t stmt_id = stmt->stmt_id;
-
-			ret = conn->command->stmt_close(conn, stmt_id);
-			if (ret == FAIL) {
-				COPY_CLIENT_ERROR(stmt->error_info, *conn->error_info);
-				DBG_RETURN(FAIL);
-			}
+			ret = conn->command->stmt_close(conn, stmt->stmt_id);
 		}
 	}
 	switch (stmt->execute_count) {
@@ -1859,7 +1823,7 @@ MYSQLND_METHOD_PRIVATE(mysqlnd_stmt, close_on_server)(MYSQLND_STMT * const s, bo
 		stmt->conn = NULL;
 	}
 
-	DBG_RETURN(PASS);
+	DBG_RETURN(ret);
 }
 /* }}} */
 
@@ -1997,9 +1961,8 @@ MYSQLND_CLASS_METHODS_END;
 
 
 /* {{{ _mysqlnd_init_ps_subsystem */
-void _mysqlnd_init_ps_subsystem()
+void _mysqlnd_init_ps_subsystem(void)
 {
 	mysqlnd_stmt_set_methods(&MYSQLND_CLASS_METHOD_TABLE_NAME(mysqlnd_stmt));
-	_mysqlnd_init_ps_fetch_subsystem();
 }
 /* }}} */

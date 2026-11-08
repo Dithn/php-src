@@ -19,9 +19,9 @@ var_dump($doc->strictErrorChecking);
 echo "Should throw DOMException when strictErrorChecking is on\n";
 try {
     $attr = $doc->createAttribute(0);
-} catch (DOMException $e) {
+} catch (Throwable $e) {
     echo "GOOD. DOMException thrown\n";
-    echo $e->getMessage() ."\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 } catch (Exception $e) {
     echo "OOPS. Other exception thrown\n";
 }
@@ -36,9 +36,9 @@ var_dump($doc->strictErrorChecking);
 echo "Should raise PHP error because strictErrorChecking is off\n";
 try {
     $attr = $doc->createAttribute(0);
-} catch (DOMException $e) {
+} catch (Throwable $e) {
     echo "OOPS. DOMException thrown\n";
-    echo $e->getMessage() ."\n";
+    echo $e::class, ': ', $e->getMessage(), "\n";
 } catch (Exception $e) {
     echo "OOPS. Other exception thrown\n";
 }
@@ -50,10 +50,10 @@ See if strictErrorChecking is on
 bool(true)
 Should throw DOMException when strictErrorChecking is on
 GOOD. DOMException thrown
-Invalid Character Error
+DOMException: Invalid Character Error
 Turn strictErrorChecking off
 See if strictErrorChecking is off
 bool(false)
 Should raise PHP error because strictErrorChecking is off
 
-Warning: DOMDocument::createAttribute(): Invalid Character Error in %sDOMDocument_strictErrorChecking_variation.php on line %d
+Warning: DOMDocument::createAttribute(): Invalid Character Error in %s on line %d

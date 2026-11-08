@@ -4,13 +4,11 @@ mysqli_stmt_insert_id()
 mysqli
 --SKIPIF--
 <?php
-require_once('skipifconnectfailure.inc');
+require_once 'skipifconnectfailure.inc';
 ?>
 --FILE--
 <?php
-    require_once("connect.inc");
-
-    require('table.inc');
+    require 'table.inc';
 
     $stmt = mysqli_stmt_init($link);
 
@@ -30,9 +28,11 @@ require_once('skipifconnectfailure.inc');
     mysqli_stmt_close($stmt);
 
     // no auto_increment column
-    $stmt = mysqli_stmt_init($link);
-    if (!mysqli_stmt_prepare($stmt, "INSERT INTO test(id, label) VALUES (100, 'a')") ||
-        !mysqli_stmt_execute($stmt)) {
+    if(!$stmt = mysqli_prepare($link, "INSERT INTO test(id, label) VALUES (100, 'a')")) {
+        printf("[006] [%d] %s\n", mysqli_errno($link), mysqli_error($link));
+    }
+
+    if (!mysqli_stmt_execute($stmt)) {
         printf("[006] [%d] %s\n", mysqli_stmt_errno($stmt), mysqli_stmt_error($stmt));
     }
 
@@ -67,9 +67,10 @@ require_once('skipifconnectfailure.inc');
 ?>
 --CLEAN--
 <?php
-    require_once("clean_table.inc");
+    require_once 'clean_table.inc';
 ?>
---EXPECT--
+--EXPECTF--
+Deprecated: Function mysqli_stmt_init() is deprecated since 8.6, use mysqli_prepare() instead in %s on line %d
 mysqli_stmt object is not fully initialized
 mysqli_stmt object is already closed
 done!

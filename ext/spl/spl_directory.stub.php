@@ -97,7 +97,7 @@ class SplFileInfo implements Stringable
     /** @tentative-return-type */
     public function __debugInfo(): array {}
 
-    /** @tentative-return-type */
+    #[\Deprecated(since: '8.2')]
     final public function _bad_state_ex(): void {}
 }
 
@@ -123,11 +123,11 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator
     /** @tentative-return-type */
     public function valid(): bool {}
 
-    /** @return int */
-    public function key(): mixed {} // TODO change return type to string
+    /** @tentative-return-type */
+    public function key(): int|string {}
 
-    /** @return DirectoryIterator */
-    public function current(): mixed {} // TODO narrow return type
+    /** @tentative-return-type */
+    public function current(): string|SplFileInfo|static {}
 
     /** @tentative-return-type */
     public function next(): void {}
@@ -141,6 +141,31 @@ class DirectoryIterator extends SplFileInfo implements SeekableIterator
 
 class FilesystemIterator extends DirectoryIterator
 {
+    /** @cvalue SPL_FILE_DIR_CURRENT_MODE_MASK */
+    public const int CURRENT_MODE_MASK = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_CURRENT_AS_PATHNAME */
+    public const int CURRENT_AS_PATHNAME = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_CURRENT_AS_FILEINFO */
+    public const int CURRENT_AS_FILEINFO = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_CURRENT_AS_SELF */
+    public const int CURRENT_AS_SELF = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_KEY_MODE_MASK */
+    public const int KEY_MODE_MASK = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_KEY_AS_PATHNAME */
+    public const int KEY_AS_PATHNAME = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_FOLLOW_SYMLINKS */
+    public const int FOLLOW_SYMLINKS = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_KEY_AS_FILENAME */
+    public const int KEY_AS_FILENAME = UNKNOWN;
+    /** @cvalue SPL_FILE_NEW_CURRENT_AND_KEY */
+    public const int NEW_CURRENT_AND_KEY = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_OTHERS_MASK */
+    public const int OTHER_MODE_MASK = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_SKIPDOTS */
+    public const int SKIP_DOTS = UNKNOWN;
+    /** @cvalue SPL_FILE_DIR_UNIXPATHS */
+    public const int UNIX_PATHS = UNKNOWN;
+
     public function __construct(string $directory, int $flags = FilesystemIterator::KEY_AS_PATHNAME | FilesystemIterator::CURRENT_AS_FILEINFO | FilesystemIterator::SKIP_DOTS) {}
 
     /** @tentative-return-type */
@@ -150,7 +175,7 @@ class FilesystemIterator extends DirectoryIterator
     public function key(): string {}
 
     /** @tentative-return-type */
-    public function current(): string|SplFileInfo|FilesystemIterator {}
+    public function current(): string|SplFileInfo|static {}
 
     /** @tentative-return-type */
     public function getFlags(): int {}
@@ -176,7 +201,6 @@ class RecursiveDirectoryIterator extends FilesystemIterator implements Recursive
     public function getSubPathname(): string {}
 }
 
-#ifdef HAVE_GLOB
 class GlobIterator extends FilesystemIterator implements Countable
 {
     public function __construct(string $pattern, int $flags = FilesystemIterator::KEY_AS_PATHNAME | FilesystemIterator::CURRENT_AS_FILEINFO) {}
@@ -184,10 +208,18 @@ class GlobIterator extends FilesystemIterator implements Countable
     /** @tentative-return-type */
     public function count(): int {}
 }
-#endif
 
 class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIterator
 {
+    /** @cvalue SPL_FILE_OBJECT_DROP_NEW_LINE */
+    public const int DROP_NEW_LINE = UNKNOWN;
+    /** @cvalue SPL_FILE_OBJECT_READ_AHEAD */
+    public const int READ_AHEAD = UNKNOWN;
+    /** @cvalue SPL_FILE_OBJECT_SKIP_EMPTY */
+    public const int SKIP_EMPTY = UNKNOWN;
+    /** @cvalue SPL_FILE_OBJECT_READ_CSV */
+    public const int READ_CSV = UNKNOWN;
+
     /** @param resource|null $context */
     public function __construct(string $filename, string $mode = "r", bool $useIncludePath = false, $context = null) {}
 
@@ -207,15 +239,19 @@ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIt
     public function fread(int $length): string|false {}
 
     /** @tentative-return-type */
+    #[\Deprecated(since: '8.6')]
     public function fgetcsv(string $separator = ",", string $enclosure = "\"", string $escape = "\\"): array|false {}
 
     /** @tentative-return-type */
+    #[\Deprecated(since: '8.6')]
     public function fputcsv(array $fields, string $separator = ",", string $enclosure = "\"", string $escape = "\\", string $eol = "\n"): int|false {}
 
     /** @tentative-return-type */
+    #[\Deprecated(since: '8.6')]
     public function setCsvControl(string $separator = ",", string $enclosure = "\"", string $escape = "\\"): void {}
 
     /** @tentative-return-type */
+    #[\Deprecated(since: '8.6')]
     public function getCsvControl(): array {}
 
     /**
@@ -243,7 +279,7 @@ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIt
     public function fscanf(string $format, mixed &...$vars): array|int|null {}
 
     /** @tentative-return-type */
-    public function fwrite(string $data, int $length = 0): int|false {}
+    public function fwrite(string $data, ?int $length = null): int|false {}
 
     /** @tentative-return-type */
     public function fstat(): array {}
@@ -273,10 +309,10 @@ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIt
     public function getMaxLineLen(): int {}
 
     /** @tentative-return-type */
-    public function hasChildren(): bool {}
+    public function hasChildren(): false {}
 
     /** @tentative-return-type */
-    public function getChildren(): ?RecursiveIterator {}
+    public function getChildren(): null {}
 
     /** @tentative-return-type */
     public function seek(int $line): void {}
@@ -287,7 +323,6 @@ class SplFileObject extends SplFileInfo implements RecursiveIterator, SeekableIt
      */
     public function getCurrentLine(): string {}
 
-    /** @implementation-alias SplFileObject::fgets */
     public function __toString(): string {}
 }
 

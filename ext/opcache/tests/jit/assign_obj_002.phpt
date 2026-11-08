@@ -4,7 +4,6 @@ JIT ASSIGN_OBJ: Assign undefined vatiable to property
 opcache.enable=1
 opcache.enable_cli=1
 opcache.file_update_protection=0
-opcache.jit_buffer_size=1M
 opcache.jit=function
 --FILE--
 <?php
@@ -24,8 +23,8 @@ function test2() {
 test();
 try {
     test2();
-} catch (TypeError $e) {
-    echo $e->getMessage(), "\n";
+} catch (Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 ?>
 --EXPECTF--
@@ -33,4 +32,4 @@ Warning: Undefined variable $undef in %s on line %d
 NULL
 
 Warning: Undefined variable $undef in %s on line %d
-Cannot assign null to property Test::$prop2 of type int
+TypeError: Cannot assign null to property Test::$prop2 of type int

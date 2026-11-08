@@ -14,14 +14,14 @@ function create_nested_data($depth, $prefix, $suffix, $inner = 'i:0;') {
 echo "Invalid max_depth:\n";
 try {
     unserialize('i:0;', ['max_depth' => 'foo']);
-} catch (TypeError $exception) {
-    echo $exception->getMessage() . "\n";
+} catch (Throwable $exception) {
+    echo $exception::class, ': ', $exception->getMessage(), "\n";
 }
 
 try {
     unserialize('i:0;', ['max_depth' => -1]);
-} catch (ValueError $exception) {
-    echo $exception->getMessage() . "\n";
+} catch (Throwable $exception) {
+    echo $exception::class, ': ', $exception->getMessage(), "\n";
 }
 
 echo "Array:\n";
@@ -108,35 +108,35 @@ var_dump(is_array(unserialize(
 ?>
 --EXPECTF--
 Invalid max_depth:
-unserialize(): Option "max_depth" must be of type int, string given
-unserialize(): Option "max_depth" must be greater than or equal to 0
+TypeError: unserialize(): Option "max_depth" must be of type int, string given
+ValueError: unserialize(): Option "max_depth" must be greater than or equal to 0
 Array:
 bool(true)
 
 Warning: unserialize(): Maximum depth of 128 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
+Warning: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
 bool(false)
 Object:
 bool(true)
 
 Warning: unserialize(): Maximum depth of 128 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 2834 of 2971 bytes in %s on line %d
+Warning: unserialize(): Error at offset 2834 of 2971 bytes in %s on line %d
 bool(false)
 Ini setting:
 bool(true)
 
 Warning: unserialize(): Maximum depth of 128 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
+Warning: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
 bool(false)
 Ini setting overridden:
 bool(true)
 
 Warning: unserialize(): Maximum depth of 256 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 2309 of 2574 bytes in %s on line %d
+Warning: unserialize(): Error at offset 2309 of 2574 bytes in %s on line %d
 bool(false)
 
 Deprecated: %s implements the Serializable interface, which is deprecated. Implement __serialize() and __unserialize() instead (or in addition, if support for old PHP versions is necessary) in %s on line %d
@@ -144,7 +144,7 @@ Nested unserialize combined depth limit:
 
 Warning: unserialize(): Maximum depth of 256 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
+Warning: unserialize(): Error at offset 1157 of 1294 bytes in %s on line %d
 bool(false)
 bool(true)
 bool(true)
@@ -154,7 +154,7 @@ Nested unserialize overridden depth limit:
 
 Warning: unserialize(): Maximum depth of 256 exceeded. The depth limit can be changed using the max_depth unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 
-Notice: unserialize(): Error at offset 2309 of 2574 bytes in %s on line %d
+Warning: unserialize(): Error at offset 2309 of 2574 bytes in %s on line %d
 bool(false)
 bool(true)
 bool(true)

@@ -61,8 +61,8 @@ foreach($inputs as $input) {
     echo "\n-- Iteration $iterator --\n";
     try {
         var_dump(hexdec($input));
-    } catch (TypeError $e) {
-        echo $e->getMessage(), "\n";
+    } catch (Throwable $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
     }
     $iterator++;
 };
@@ -81,9 +81,7 @@ int(1)
 int(74565)
 
 -- Iteration 4 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(9029)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 5 --
 int(285960729237)
@@ -92,27 +90,19 @@ int(285960729237)
 int(285960729238)
 
 -- Iteration 7 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(261)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 8 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(261)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 9 --
 int(20015998341120)
 
 -- Iteration 10 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(1250999896553)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 11 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(5)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 12 --
 int(1)
@@ -133,22 +123,16 @@ int(0)
 int(0)
 
 -- Iteration 18 --
-hexdec(): Argument #1 ($hex_string) must be of type string, array given
+TypeError: hexdec(): Argument #1 ($hex_string) must be of type string, array given
 
 -- Iteration 19 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(2748)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 20 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(2748)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 21 --
-
-Deprecated: Invalid characters passed for attempted conversion, these have been ignored in %s on line %d
-int(2748)
+Exception: Invalid characters passed for attempted conversion
 
 -- Iteration 22 --
-hexdec(): Argument #1 ($hex_string) must be of type string, resource given
+TypeError: hexdec(): Argument #1 ($hex_string) must be of type string, resource given

@@ -1,26 +1,26 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Andrey Hristov <andrey@php.net>                             |
   |          Ulf Wendel <uw@php.net>                                     |
   +----------------------------------------------------------------------+
 */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 #include "php.h"
 #include "mysqlnd.h"
 #include "mysqlnd_priv.h"
 #include "mysqlnd_debug.h"
 #include "mysqlnd_statistics.h"
-#include "mysqlnd_reverse_api.h"
 #include "ext/standard/info.h"
 #include "zend_smart_str.h"
 
@@ -56,30 +56,13 @@ mysqlnd_minfo_dump_loaded_plugins(zval *el, void * buf)
 /* }}} */
 
 
-/* {{{ mysqlnd_minfo_dump_api_plugins */
-static void
-mysqlnd_minfo_dump_api_plugins(smart_str * buffer)
-{
-	HashTable *ht = mysqlnd_reverse_api_get_api_list();
-	MYSQLND_REVERSE_API *ext;
-
-	ZEND_HASH_MAP_FOREACH_PTR(ht, ext) {
-		if (buffer->s) {
-			smart_str_appendc(buffer, ',');
-		}
-		smart_str_appends(buffer, ext->module->name);
-	} ZEND_HASH_FOREACH_END();
-}
-/* }}} */
-
-
 /* {{{ PHP_MINFO_FUNCTION */
 PHP_MINFO_FUNCTION(mysqlnd)
 {
 	char buf[32];
 
 	php_info_print_table_start();
-	php_info_print_table_header(2, "mysqlnd", "enabled");
+	php_info_print_table_row(2, "mysqlnd", "enabled");
 	php_info_print_table_row(2, "Version", mysqlnd_get_client_info());
 	php_info_print_table_row(2, "Compression",
 #ifdef MYSQLND_COMPRESSION_ENABLED
@@ -116,11 +99,6 @@ PHP_MINFO_FUNCTION(mysqlnd)
 		mysqlnd_plugin_apply_with_argument(mysqlnd_minfo_dump_loaded_plugins, &tmp_str);
 		smart_str_0(&tmp_str);
 		php_info_print_table_row(2, "Loaded plugins", tmp_str.s? ZSTR_VAL(tmp_str.s) : "");
-		smart_str_free(&tmp_str);
-
-		mysqlnd_minfo_dump_api_plugins(&tmp_str);
-		smart_str_0(&tmp_str);
-		php_info_print_table_row(2, "API Extensions", tmp_str.s? ZSTR_VAL(tmp_str.s) : "");
 		smart_str_free(&tmp_str);
 	}
 

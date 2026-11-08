@@ -1,16 +1,12 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
 */
 
@@ -38,20 +34,49 @@ ZEND_BEGIN_MODULE_GLOBALS(zend_test)
 	int observer_observe_all;
 	int observer_observe_includes;
 	int observer_observe_functions;
+	int observer_observe_declaring;
 	zend_array *observer_observe_function_names;
 	int observer_show_return_type;
 	int observer_show_return_value;
 	int observer_show_init_backtrace;
 	int observer_show_opcode;
 	char *observer_show_opcode_in_user_handler;
+	int observer_set_vm_interrupt_on_begin;
+	int observer_set_vm_interrupt_on_begin_without_callback;
+	int observer_set_vm_interrupt_on_end;
+	bool observer_throw_on_vm_interrupt;
 	int observer_nesting_depth;
 	int observer_fiber_init;
 	int observer_fiber_switch;
 	int observer_fiber_destroy;
-	HashTable global_weakmap;
+	int observer_execute_internal;
+	int observer_reserve_op_array_handle;
+	HashTable *global_weakmap;
 	int replace_zend_execute_ex;
 	int register_passes;
+	bool rearm_vm_interrupt;
+	bool print_stderr_mshutdown;
+	zend_long limit_copy_file_range;
+	int observe_opline_in_zendmm;
+	zend_mm_heap* zend_orig_heap;
+	zend_mm_heap* zend_test_heap;
 	zend_test_fiber *active_fiber;
+	zend_long quantity_value;
+	zend_string *str_test;
+	zend_string *not_empty_str_test;
+	int zend_mm_custom_handlers_enabled;
+
+	// the previous heap that was found in ZendMM
+	zend_mm_heap* original_heap;
+	// the custom handlers that might have been found in the previous heap
+	void* (*custom_malloc)(size_t ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+	void (*custom_free)(void* ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+	void* (*custom_realloc)(void *, size_t ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC);
+	size_t (*custom_gc)(void);
+	void (*custom_shutdown)(bool, bool);
+	// this is our heap that we install our custom handlers on and inject into
+	// ZendMM
+	zend_mm_heap* observed_heap;
 ZEND_END_MODULE_GLOBALS(zend_test)
 
 extern ZEND_DECLARE_MODULE_GLOBALS(zend_test)

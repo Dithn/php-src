@@ -2,15 +2,13 @@
   +----------------------------------------------------------------------+
   | phar php single-file executable PHP extension                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Authors: Gregory Beaver <cellog@php.net>                             |
   |          Marcus Boerger <helly@php.net>                              |
@@ -145,6 +143,13 @@ typedef struct _phar_zip_unix3 {
 	char gid[2];         /* GID           Short       group ID */
 /* (var.)        variable    symbolic link filename */
 } phar_zip_unix3;
+
+/* See https://libzip.org/specifications/extrafld.txt */
+typedef struct _phar_zip_unix_time {
+    phar_zip_extra_field_header header;
+    char flags;                 /* flags                            1 byte  */
+    char time[4];               /* time in standard Unix format     4 bytes	*/
+} phar_zip_unix_time;
 
 typedef struct _phar_zip_central_dir_file {
 	char signature[4];            /* central file header signature   4 bytes  (0x02014b50) */

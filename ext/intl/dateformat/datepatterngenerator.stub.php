@@ -2,6 +2,7 @@
 
 /** @generate-class-entries */
 
+/** @not-serializable */
 class IntlDatePatternGenerator
 {
     public function __construct(?string $locale = null) {}
@@ -9,4 +10,8 @@ class IntlDatePatternGenerator
     public static function create(?string $locale = null): ?IntlDatePatternGenerator {}
 
     public function getBestPattern(string $skeleton): string|false {}
+
+    public static function getSkeleton(string $pattern): string|false {}
+
+    public static function getBaseSkeleton(string $pattern): string|false {}
 }

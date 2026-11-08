@@ -27,6 +27,7 @@ var_dump( fclose($file_handle) );  //Check for close operation on the file handl
 var_dump( get_resource_type($file_handle) );  //Check whether resource is lost after close operation
 $file_handle = fopen($file, "x+b");  //Opening the existing data file in "x+b" mode to check for the warning message
 echo "*** Done ***\n";
+?>
 --CLEAN--
 <?php
 unlink(__DIR__."/007_variation24.tmp");
@@ -45,5 +46,5 @@ int(37)
 bool(true)
 string(7) "Unknown"
 
-Warning: fopen(%s): Failed to open stream: File exists in %s on line %d
+Warning: fopen(): Failed to open stream: File exists in %s on line %d
 *** Done ***

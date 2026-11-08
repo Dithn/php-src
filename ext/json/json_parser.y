@@ -2,15 +2,13 @@
 %code top {
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Jakub Zelenka <bukka@php.net>                                |
   +----------------------------------------------------------------------+
@@ -49,7 +47,6 @@ int json_yydebug = 1;
 	zval value;
 }
 
-
 %token <value> PHP_JSON_T_NUL
 %token <value> PHP_JSON_T_TRUE
 %token <value> PHP_JSON_T_FALSE
@@ -80,6 +77,7 @@ start:
 			{
 				ZVAL_COPY_VALUE(&$$, &$1);
 				ZVAL_COPY_VALUE(parser->return_value, &$1);
+				(void) php_json_yynerrs;
 				YYACCEPT;
 			}
 ;
@@ -117,7 +115,9 @@ members:
 				if ((parser->scanner.options & PHP_JSON_OBJECT_AS_ARRAY) && parser->methods.object_create == php_json_parser_object_create) {
 					ZVAL_EMPTY_ARRAY(&$$);
 				} else {
-					parser->methods.object_create(parser, &$$);
+					if (UNEXPECTED(parser->methods.object_create(parser, &$$) == FAILURE)) {
+						YYERROR;
+					}
 				}
 			}
 	|	member
@@ -126,7 +126,9 @@ members:
 member:
 		key ':' value
 			{
-				parser->methods.object_create(parser, &$$);
+				if (UNEXPECTED(parser->methods.object_create(parser, &$$) == FAILURE)) {
+					YYERROR;
+				}
 				if (parser->methods.object_update(parser, &$$, Z_STR($1), &$3) == FAILURE) {
 					YYERROR;
 				}
@@ -173,7 +175,9 @@ elements:
 				if (parser->methods.array_create == php_json_parser_array_create) {
 					ZVAL_EMPTY_ARRAY(&$$);
 				} else {
-					parser->methods.array_create(parser, &$$);
+					if (UNEXPECTED(parser->methods.array_create(parser, &$$) == FAILURE)) {
+						YYERROR;
+					}
 				}
 			}
 	|	element
@@ -182,12 +186,18 @@ elements:
 element:
 		value
 			{
-				parser->methods.array_create(parser, &$$);
-				parser->methods.array_append(parser, &$$, &$1);
+				if (UNEXPECTED(parser->methods.array_create(parser, &$$) == FAILURE)) {
+					YYERROR;
+				}
+				if (UNEXPECTED(parser->methods.array_append(parser, &$$, &$1) == FAILURE)) {
+					YYERROR;
+				}
 			}
 	|	element ',' value
 			{
-				parser->methods.array_append(parser, &$1, &$3);
+				if (UNEXPECTED(parser->methods.array_append(parser, &$1, &$3) == FAILURE)) {
+					YYERROR;
+				}
 				ZVAL_COPY_VALUE(&$$, &$1);
 			}
 ;
@@ -213,22 +223,34 @@ value:
 
 static int php_json_parser_array_create(php_json_parser *parser, zval *array)
 {
-	array_init(array);
+	if (UNEXPECTED(!array_finit(array))) {
+		ZEND_ASSERT(ZEND_HAS_OOM());
+		return FAILURE;
+	}
 	return SUCCESS;
 }
 
 static int php_json_parser_array_append(php_json_parser *parser, zval *array, zval *zvalue)
 {
-	zend_hash_next_index_insert(Z_ARRVAL_P(array), zvalue);
+	if (UNEXPECTED(zend_hash_next_index_finsert(Z_ARRVAL_P(array), zvalue) == HASH_NOMEM)) {
+		ZEND_ASSERT(ZEND_HAS_OOM());
+		return FAILURE;
+	}
 	return SUCCESS;
 }
 
 static int php_json_parser_object_create(php_json_parser *parser, zval *object)
 {
+	bool created;
+
 	if (parser->scanner.options & PHP_JSON_OBJECT_AS_ARRAY) {
-		array_init(object);
+		created = array_finit(object);
 	} else {
-		object_init(object);
+		created = object_finit(object);
+	}
+	if (UNEXPECTED(!created)) {
+		ZEND_ASSERT(ZEND_HAS_OOM());
+		return FAILURE;
 	}
 	return SUCCESS;
 }
@@ -237,7 +259,9 @@ static int php_json_parser_object_update(php_json_parser *parser, zval *object, 
 {
 	/* if JSON_OBJECT_AS_ARRAY is set */
 	if (Z_TYPE_P(object) == IS_ARRAY) {
-		zend_symtable_update(Z_ARRVAL_P(object), key, zvalue);
+		if (UNEXPECTED(zend_symtable_fupdate(Z_ARRVAL_P(object), key, zvalue) == HASH_NOMEM)) {
+			return FAILURE;
+		}
 	} else {
 		if (ZSTR_LEN(key) > 0 && ZSTR_VAL(key)[0] == '\0') {
 			parser->scanner.errcode = PHP_JSON_ERROR_INVALID_PROPERTY_NAME;
@@ -248,16 +272,53 @@ static int php_json_parser_object_update(php_json_parser *parser, zval *object, 
 		}
 		zend_std_write_property(Z_OBJ_P(object), key, zvalue, NULL);
 		Z_TRY_DELREF_P(zvalue);
+		if (ZEND_HAS_OOM()) {
+			return FAILURE;
+		}
 	}
 	zend_string_release_ex(key, 0);
 
 	return SUCCESS;
 }
 
+static int php_json_parser_array_create_validate(php_json_parser *parser, zval *array)
+{
+	ZVAL_NULL(array);
+	return SUCCESS;
+}
+
+static int php_json_parser_array_append_validate(php_json_parser *parser, zval *array, zval *zvalue)
+{
+	return SUCCESS;
+}
+
+static int php_json_parser_object_create_validate(php_json_parser *parser, zval *object)
+{
+	ZVAL_NULL(object);
+	return SUCCESS;
+}
+
+static int php_json_parser_object_update_validate(php_json_parser *parser, zval *object, zend_string *key, zval *zvalue)
+{
+	return SUCCESS;
+}
+
 static int php_json_yylex(union YYSTYPE *value, php_json_parser *parser)
 {
 	int token = php_json_scan(&parser->scanner);
-	value->value = parser->scanner.value;
+
+	bool validate = parser->methods.array_create == php_json_parser_array_create_validate
+		&& parser->methods.array_append == php_json_parser_array_append_validate
+		&& parser->methods.object_create == php_json_parser_object_create_validate
+		&& parser->methods.object_update == php_json_parser_object_update_validate;
+
+	if (validate) {
+		zval_ptr_dtor_str(&(parser->scanner.value));
+		ZVAL_UNDEF(&value->value);
+	} else {
+		value->value = parser->scanner.value;
+	}
+
 	return token;
 }
 
@@ -273,6 +334,30 @@ PHP_JSON_API php_json_error_code php_json_parser_error_code(const php_json_parse
 	return parser->scanner.errcode;
 }
 
+static uint64_t php_json_compute_error_column(const php_json_scanner *s)
+{
+	const php_json_ctype *p = s->line_start;
+	const php_json_ctype *end = s->token;
+	/* Count characters from the start of the line to the failing token,
+	 * folding UTF-8 continuation bytes into their leading byte. */
+	uint64_t column = 1;
+
+	while (p < end) {
+		if ((*p & 0b11000000) != 0b10000000) {
+			column++;
+		}
+		p++;
+	}
+	return column;
+}
+
+PHP_JSON_API void php_json_parser_error_details(const php_json_parser *parser, php_json_error_details *out)
+{
+	out->code = parser->scanner.errcode;
+	out->line = parser->scanner.line;
+	out->column = php_json_compute_error_column(&parser->scanner);
+}
+
 static const php_json_parser_methods default_parser_methods =
 {
 	php_json_parser_array_create,
@@ -281,6 +366,18 @@ static const php_json_parser_methods default_parser_methods =
 	NULL,
 	php_json_parser_object_create,
 	php_json_parser_object_update,
+	NULL,
+	NULL,
+};
+
+static const php_json_parser_methods validate_parser_methods =
+{
+	php_json_parser_array_create_validate,
+	php_json_parser_array_append_validate,
+	NULL,
+	NULL,
+	php_json_parser_object_create_validate,
+	php_json_parser_object_update_validate,
 	NULL,
 	NULL,
 };
@@ -321,4 +418,9 @@ PHP_JSON_API void php_json_parser_init(php_json_parser *parser,
 PHP_JSON_API int php_json_parse(php_json_parser *parser)
 {
 	return php_json_yyparse(parser);
+}
+
+const php_json_parser_methods* php_json_get_validate_methods(void)
+{
+	return &validate_parser_methods;
 }

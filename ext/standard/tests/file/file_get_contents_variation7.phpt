@@ -47,11 +47,20 @@ for($i = 0; $i<count($allDirs); $i++) {
 }
 
 chdir($old_dir_path);
+
+echo "\n*** Done ***\n";
+?>
+--CLEAN--
+<?php
+$mainDir = "fileGetContentsVar7.dir";
+$subDir = "fileGetContentsVar7Sub";
+$absMainDir = __DIR__."/".$mainDir;
+$absSubDir = $absMainDir."/".$subDir;
+$filename = 'FileGetContentsVar7.tmp';
+$absFile = $absSubDir.'/'.$filename;
 unlink($absFile);
 rmdir($absSubDir);
 rmdir($absMainDir);
-
-echo "\n*** Done ***\n";
 ?>
 --EXPECTF--
 *** Testing file_get_contents() : variation ***
@@ -70,12 +79,12 @@ string(%d) "contents read"
 
 -- Iteration 5 --
 
-Warning: file_get_contents(%sfileGetContentsVar7.dir/fileGetContentsVar7Sub/..///fileGetContentsVar7Sub//..//../fileGetContentsVar7Sub/FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 -- Iteration 6 --
 
-Warning: file_get_contents(%sfileGetContentsVar7.dir/fileGetContentsVar7Sub/BADDIR/FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 -- Iteration 7 --
@@ -92,7 +101,7 @@ string(%d) "contents read"
 
 -- Iteration 11 --
 
-Warning: file_get_contents(BADDIR/FileGetContentsVar7.tmp): Failed to open stream: No such file or directory in %s on line %d
+Warning: file_get_contents(): Failed to open stream: No such file or directory in %s on line %d
 bool(false)
 
 *** Done ***

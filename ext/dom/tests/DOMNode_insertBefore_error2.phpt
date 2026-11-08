@@ -6,8 +6,6 @@ DOM_NOT_FOUND is raised if refnode is not a child
 This test checks the error message is raised when the refnode is a sibling
 --CREDITS--
 Antonio Diaz Ruiz <dejalatele@gmail.com>
---INI--
-assert.bail=true
 --EXTENSIONS--
 dom
 --FILE--
@@ -29,10 +27,10 @@ $ref_node = $dom->getElementsByTagName("book")->item(1);
 
 try {
     $parent_node->insertBefore($new_node, $ref_node);
-} catch(DOMException $e) {
-    echo $e->getMessage();
+} catch(Throwable $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 ?>
 --EXPECT--
-Not Found Error
+DOMException: Not Found Error

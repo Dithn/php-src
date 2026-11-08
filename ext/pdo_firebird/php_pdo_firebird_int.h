@@ -1,18 +1,18 @@
 /*
   +----------------------------------------------------------------------+
-  | Copyright (c) The PHP Group                                          |
+  | Copyright © The PHP Group and Contributors.                          |
   +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | https://www.php.net/license/3_01.txt                                 |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
+  | This source file is subject to the Modified BSD License that is      |
+  | bundled with this package in the file LICENSE, and is available      |
+  | through the World Wide Web at <https://www.php.net/license/>.        |
+  |                                                                      |
+  | SPDX-License-Identifier: BSD-3-Clause                                |
   +----------------------------------------------------------------------+
   | Author: Ard Biesheuvel <abies@php.net>                               |
   +----------------------------------------------------------------------+
 */
+
+/* internal header; not supposed to be installed */
 
 #ifndef PHP_PDO_FIREBIRD_INT_H
 #define PHP_PDO_FIREBIRD_INT_H
@@ -31,8 +31,6 @@
 #define PDO_FB_DEF_TIME_FMT "%H:%M:%S"
 #define PDO_FB_DEF_TIMESTAMP_FMT PDO_FB_DEF_DATE_FMT " " PDO_FB_DEF_TIME_FMT
 
-#define SHORT_MAX (1 << (8*sizeof(short)-1))
-
 #if SIZEOF_ZEND_LONG == 8 && !defined(PHP_WIN32)
 # define LL_LIT(lit) lit ## L
 #else
@@ -42,12 +40,6 @@
 
 /* Firebird API has a couple of missing const decls in its API */
 #define const_cast(s) ((char*)(s))
-
-#ifdef PHP_WIN32
-typedef void (__stdcall *info_func_t)(char*);
-#else
-typedef void (*info_func_t)(char*);
-#endif
 
 #ifndef min
 #define min(a,b) ((a)<(b)?(a):(b))
@@ -60,7 +52,12 @@ typedef void (*info_func_t)(char*);
 #endif
 
 typedef struct {
+	int sqlcode;
+	char *errmsg;
+	size_t errmsg_length;
+} pdo_firebird_error_info;
 
+typedef struct {
 	/* the result of the last API call */
 	ISC_STATUS isc_status[20];
 
@@ -69,9 +66,9 @@ typedef struct {
 
 	/* the transaction handle */
 	isc_tr_handle tr;
-
-	/* the last error that didn't come from the API */
-	char const *last_app_error;
+	bool in_manually_txn;
+	bool is_writable_txn;
+	zend_ulong txn_isolation_level;
 
 	/* date and time format strings, can be set by the set_attribute method */
 	char *date_format;
@@ -85,11 +82,11 @@ typedef struct {
 
 	unsigned _reserved:29;
 
+	pdo_firebird_error_info einfo;
 } pdo_firebird_db_handle;
 
 
 typedef struct {
-
 	/* the link that owns this statement */
 	pdo_firebird_db_handle *H;
 
@@ -118,19 +115,37 @@ typedef struct {
 
 	/* the output SQLDA */
 	XSQLDA out_sqlda; /* last member */
-
 } pdo_firebird_stmt;
 
 extern const pdo_driver_t pdo_firebird_driver;
 
 extern const struct pdo_stmt_methods firebird_stmt_methods;
 
-void _firebird_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, char const *file, zend_long line);
+extern void php_firebird_set_error(pdo_dbh_t *dbh, pdo_stmt_t *stmt, const char *state, const size_t state_len,
+	const char *msg, const size_t msg_len);
+#define php_firebird_error(d) php_firebird_set_error(d, NULL, NULL, 0, NULL, 0)
+#define php_firebird_error_stmt(s) php_firebird_set_error(s->dbh, s, NULL, 0, NULL, 0)
+#define php_firebird_error_with_info(d,e,el,m,ml) php_firebird_set_error(d, NULL, e, el, m, ml)
+#define php_firebird_error_stmt_with_info(s,e,el,m,ml) php_firebird_set_error(s->dbh, s, e, el, m, ml)
+
+extern bool php_firebird_commit_transaction(pdo_dbh_t *dbh, bool retain);
 
 enum {
 	PDO_FB_ATTR_DATE_FORMAT = PDO_ATTR_DRIVER_SPECIFIC,
 	PDO_FB_ATTR_TIME_FORMAT,
 	PDO_FB_ATTR_TIMESTAMP_FORMAT,
+
+	/*
+	 * transaction isolation level
+	 * firebird does not have a level equivalent to read uncommited.
+	 */
+	PDO_FB_TRANSACTION_ISOLATION_LEVEL,
+	PDO_FB_READ_COMMITTED,
+	PDO_FB_REPEATABLE_READ,
+	PDO_FB_SERIALIZABLE,
+
+	/* transaction access mode */
+	PDO_FB_WRITABLE_TRANSACTION,
 };
 
 #endif	/* PHP_PDO_FIREBIRD_INT_H */

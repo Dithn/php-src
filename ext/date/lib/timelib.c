@@ -35,9 +35,9 @@
 
 #define TIMELIB_LLABS(y) (y < 0 ? (y * -1) : y)
 
-const char *timelib_error_messages[10] = {
+const char *timelib_error_messages[18] = {
 	"No error",
-	"Can not allocate buffer for parsing",
+	"Cannot allocate buffer for parsing",
 	"Corrupt tzfile: The transitions in the file don't always increase",
 	"Corrupt tzfile: The expected 64-bit preamble is missing",
 	"Corrupt tzfile: No abbreviation could be found for a transition",
@@ -45,7 +45,15 @@ const char *timelib_error_messages[10] = {
 	"No timezone with this name could be found",
 	"A 'slim' timezone file has been detected",
 	"The embedded POSIX string is not valid",
-	"The embedded POSIX string is empty"
+	"The embedded POSIX string is empty",
+	"Seconds value out of range",
+	"Nanoseconds value out of range",
+	"Division by zero",
+	"Integer Overflow",
+	"The ISO 8601 duration string may only contain the period (P) aspect",
+	"The ISO 8601 duration string is missing the period (P) aspect",
+	"The ISO 8601 duration string may only contain the time (T) aspect",
+	"The ISO 8601 duration string could not be parsed",
 };
 
 const char *timelib_get_error_message(int error_code)
@@ -126,7 +134,7 @@ void timelib_time_tz_abbr_update(timelib_time* tm, const char* tz_abbr)
 	TIMELIB_TIME_FREE(tm->tz_abbr);
 	tm->tz_abbr = timelib_strdup(tz_abbr);
 	for (i = 0; i < tz_abbr_len; i++) {
-		tm->tz_abbr[i] = toupper(tz_abbr[i]);
+		tm->tz_abbr[i] = toupper((unsigned char)tz_abbr[i]);
 	}
 }
 
@@ -187,14 +195,22 @@ timelib_long timelib_date_to_int(timelib_time *d, int *error)
 
 void timelib_decimal_hour_to_hms(double h, int *hour, int *min, int *sec)
 {
-	if (h > 0) {
-		*hour = floor(h);
-		*min = floor((h - *hour) * 60);
-		*sec = (h - *hour - ((float) *min / 60)) * 3600;
-	} else {
-		*hour = ceil(h);
-		*min = 0 - ceil((h - *hour) * 60);
-		*sec = 0 - (h - *hour - ((float) *min / -60)) * 3600;
+	bool swap = false;
+	int seconds;
+
+	if (h < 0) {
+		swap = true;
+		h = fabs(h);
+	}
+
+	*hour = floor(h);
+	seconds = floor((h - *hour) * 3600);
+
+	*min = seconds / 60;
+	*sec = seconds % 60;
+
+	if (swap) {
+		*hour = 0 - *hour;
 	}
 }
 

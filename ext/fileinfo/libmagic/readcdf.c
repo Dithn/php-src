@@ -26,14 +26,12 @@
 #include "file.h"
 
 #ifndef lint
-FILE_RCSID("@(#)$File: readcdf.c,v 1.74 2019/09/11 15:46:30 christos Exp $")
+FILE_RCSID("@(#)$File: readcdf.c,v 1.82 2026/06/02 17:33:48 christos Exp $")
 #endif
 
 #include <assert.h>
 #include <stdlib.h>
-#ifdef PHP_WIN32
-#include "win32/unistd.h"
-#else
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 #include <string.h>
@@ -81,7 +79,7 @@ static const struct cv {
 } clsid2mime[] = {
 	{
 		{ 0x00000000000c1084ULL, 0x46000000000000c0ULL  },
-		"x-msi",
+		"vnd.ms-msi",
 	},
 	{	{ 0,			 0			},
 		NULL,
@@ -89,14 +87,14 @@ static const struct cv {
 }, clsid2desc[] = {
 	{
 		{ 0x00000000000c1084ULL, 0x46000000000000c0ULL  },
-		"MSI Installer",
+		"Microsoft Installer",
 	},
 	{	{ 0,			 0			},
 		NULL,
 	},
 };
 
-private const char *
+file_private const char *
 cdf_clsid_to_mime(const uint64_t clsid[2], const struct cv *cv)
 {
 	size_t i;
@@ -107,7 +105,7 @@ cdf_clsid_to_mime(const uint64_t clsid[2], const struct cv *cv)
 	return NULL;
 }
 
-private const char *
+file_private const char *
 cdf_app_to_mime(const char *vbuf, const struct nv *nv)
 {
 	size_t i;
@@ -133,7 +131,7 @@ cdf_app_to_mime(const char *vbuf, const struct nv *nv)
 	return rv;
 }
 
-private int
+file_private int
 cdf_file_property_info(struct magic_set *ms, const cdf_property_info_t *info,
     size_t count, const cdf_directory_t *root_storage)
 {
@@ -147,7 +145,7 @@ cdf_file_property_info(struct magic_set *ms, const cdf_property_info_t *info,
 
 	memset(&ts, 0, sizeof(ts));
 
-        if (!NOTMIME(ms) && root_storage)
+	if (!NOTMIME(ms) && root_storage)
 		str = cdf_clsid_to_mime(root_storage->d_storage_uuid,
 		    clsid2mime);
 
@@ -211,6 +209,11 @@ cdf_file_property_info(struct magic_set *ms, const cdf_property_info_t *info,
 				} else if (str == NULL && info[i].pi_id ==
 				    CDF_PROPERTY_NAME_OF_APPLICATION) {
 					str = cdf_app_to_mime(vbuf, app2mime);
+#ifdef CDF_DEBUG
+					fprintf(stderr, "Found property "
+					    "application name = \"%s\" "
+					    "(mime=%s)\n", vbuf, str);
+#endif
 				}
 			}
 			break;
@@ -253,7 +256,7 @@ cdf_file_property_info(struct magic_set *ms, const cdf_property_info_t *info,
 	return 1;
 }
 
-private int
+file_private int
 cdf_file_catalog(struct magic_set *ms, const cdf_header_t *h,
     const cdf_stream_t *sst)
 {
@@ -284,7 +287,7 @@ cdf_file_catalog(struct magic_set *ms, const cdf_header_t *h,
 	return 1;
 }
 
-private int
+file_private int
 cdf_file_summary_info(struct magic_set *ms, const cdf_header_t *h,
     const cdf_stream_t *sst, const cdf_directory_t *root_storage)
 {
@@ -343,7 +346,7 @@ cdf_file_summary_info(struct magic_set *ms, const cdf_header_t *h,
 }
 
 #ifdef notdef
-private char *
+file_private char *
 format_clsid(char *buf, size_t len, const uint64_t uuid[2]) {
 	snprintf(buf, len, "%.8" PRIx64 "-%.4" PRIx64 "-%.4" PRIx64 "-%.4"
 	    PRIx64 "-%.12" PRIx64,
@@ -356,7 +359,7 @@ format_clsid(char *buf, size_t len, const uint64_t uuid[2]) {
 }
 #endif
 
-private int
+file_private int
 cdf_file_catalog_info(struct magic_set *ms, const cdf_info_t *info,
     const cdf_header_t *h, const cdf_sat_t *sat, const cdf_sat_t *ssat,
     const cdf_stream_t *sst, const cdf_dir_t *dir, cdf_stream_t *scn)
@@ -374,7 +377,7 @@ cdf_file_catalog_info(struct magic_set *ms, const cdf_info_t *info,
 	return i;
 }
 
-private int
+file_private int
 cdf_check_summary_info(struct magic_set *ms, const cdf_info_t *info,
     const cdf_header_t *h, const cdf_sat_t *sat, const cdf_sat_t *ssat,
     const cdf_stream_t *sst, const cdf_dir_t *dir, cdf_stream_t *scn,
@@ -422,7 +425,7 @@ cdf_check_summary_info(struct magic_set *ms, const cdf_info_t *info,
 	return i;
 }
 
-private struct sinfo {
+file_private struct sinfo {
 	const char *name;
 	const char *mime;
 	const char *sections[5];
@@ -478,7 +481,7 @@ private struct sinfo {
 	},
 	{ "Microsoft PowerPoint", "vnd.ms-powerpoint",
 		{
-			"PowerPoint", NULL, NULL, NULL, NULL,
+			"PowerPoint Document", NULL, NULL, NULL, NULL,
 		},
 		{
 			CDF_DIR_TYPE_USER_STREAM,
@@ -499,36 +502,51 @@ private struct sinfo {
 	},
 };
 
-private int
+file_private int
 cdf_file_dir_info(struct magic_set *ms, const cdf_dir_t *dir)
 {
-	size_t sd, j;
+	size_t sd, i, j;
+	uint16_t *dir_name;
+	int dir_type;
+	const char* section_name;
 
-	for (sd = 0; sd < __arraycount(sectioninfo); sd++) {
-		const struct sinfo *si = &sectioninfo[sd];
-		for (j = 0; si->sections[j]; j++) {
-			if (cdf_find_stream(dir, si->sections[j], si->types[j])
-			    > 0)
-				break;
+	for (i = 0; i < dir->dir_len; i++) {
+		dir_name = dir->dir_tab[i].d_name;
+		dir_type = dir->dir_tab[i].d_type;
+
+		for (sd = 0; sd < __arraycount(sectioninfo); sd++) {
+			const struct sinfo *si = &sectioninfo[sd];
+			for (j = 0; si->sections[j]; j++) {
+				if (si->sections[j] == NULL)
+					continue;
+				section_name = si->sections[j];
+				if (si->types[j] != dir_type ||
+				    cdf_namecmp(section_name, dir_name,
+					strlen(section_name) + 1) != 0)
+				    continue;
 #ifdef CDF_DEBUG
-			fprintf(stderr, "Can't read %s\n", si->sections[j]);
+				fprintf(stderr, "Matching directory %"
+				    SIZE_T_FORMAT
+				    "u with expected name \"%s\"\n",
+				    i, section_name);
 #endif
+				if (NOTMIME(ms)) {
+					if (file_printf(ms, "CDFV2 %s",
+					    si->name) == -1)
+						return -1;
+				} else if (ms->flags & MAGIC_MIME_TYPE) {
+					if (file_printf(ms, "application/%s",
+					    si->mime) == -1)
+						return -1;
+				}
+				return 1;
+			}
 		}
-		if (si->sections[j] == NULL)
-			continue;
-		if (NOTMIME(ms)) {
-			if (file_printf(ms, "CDFV2 %s", si->name) == -1)
-				return -1;
-		} else if (ms->flags & MAGIC_MIME_TYPE) {
-			if (file_printf(ms, "application/%s", si->mime) == -1)
-				return -1;
-		}
-		return 1;
 	}
 	return -1;
 }
 
-protected int
+file_protected int
 file_trycdf(struct magic_set *ms, const struct buffer *b)
 {
 	int fd = b->fd;
@@ -596,15 +614,15 @@ file_trycdf(struct magic_set *ms, const struct buffer *b)
 	}
 #endif
 
-	if ((i = cdf_read_user_stream(&info, &h, &sat, &ssat, &sst, &dir,
-	    "FileHeader", &scn)) != -1) {
+	if (cdf_read_user_stream(&info, &h, &sat, &ssat, &sst, &dir,
+	    "FileHeader", &scn) != -1) {
 #define HWP5_SIGNATURE "HWP Document File"
 		if (scn.sst_len * scn.sst_ss >= sizeof(HWP5_SIGNATURE) - 1
 		    && memcmp(scn.sst_tab, HWP5_SIGNATURE,
 		    sizeof(HWP5_SIGNATURE) - 1) == 0) {
 		    if (NOTMIME(ms)) {
 			if (file_printf(ms,
-			    "Hangul (Korean) Word Processor File 5.x") == -1)
+			    "Hancom HWP (Hangul Word Processor) file, version 5.0") == -1)
 			    return -1;
 		    } else if (ms->flags & MAGIC_MIME_TYPE) {
 			if (file_printf(ms, "application/x-hwp") == -1)
@@ -665,7 +683,8 @@ out0:
 			if (file_printf(ms, ", %s", expn) == -1)
 				return -1;
 	} else if (ms->flags & MAGIC_MIME_TYPE) {
-		if (file_printf(ms, "application/CDFV2") == -1)
+		/* https://reposcope.com/mimetype/application/x-ole-storage */
+		if (file_printf(ms, "application/x-ole-storage") == -1)
 			return -1;
 	}
 	return 1;
